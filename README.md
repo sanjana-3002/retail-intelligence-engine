@@ -1,4 +1,4 @@
-# Real-Time Retail Intelligence Engine
+# Real-Time Retail Intelligence Engine ["work in progress"]
 
 A production-grade data science platform for retail analytics, combining real-time event streaming, advanced ML models, and a REST API to deliver actionable intelligence across customer behaviour, inventory, demand forecasting, and causal experimentation.
 
