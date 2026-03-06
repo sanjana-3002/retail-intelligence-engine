@@ -1,0 +1,16 @@
+data/raw/
+*.pkl
+.env
+credentials.json
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+*.ipynb_checkpoints/
+.ipynb_checkpoints/
