@@ -47,3 +47,23 @@ def fit_bgnbd(clv_df):
     print("BG/NBD fitted:")
     print(bgf)
     return bgf
+
+
+def predict_purchases(bgf, clv_df):
+    predicted_purchases_90d = bgf.conditional_expected_number_of_purchases_up_to_time(
+        90,
+        clv_df["frequency_repeat"],
+        clv_df["recency_bgnbd"],
+        clv_df["T_bgnbd"],
+    )
+
+    prob_alive = bgf.conditional_probability_alive(
+        clv_df["frequency_repeat"],
+        clv_df["recency_bgnbd"],
+        clv_df["T_bgnbd"],
+    )
+
+    print(f"median predicted purchases (90d) : {predicted_purchases_90d.median():.3f}")
+    print(f"median prob alive                : {prob_alive.median():.3f}")
+
+    return predicted_purchases_90d, prob_alive
