@@ -56,3 +56,66 @@ def prepare_churn_features(master_with_label):
     print(f"churn rate     : {y.mean() * 100:.1f}%")
 
     return X, y
+
+
+def fit_xgboost_classifier(X_train, y_train, X_test, y_test):
+    """Fit XGBClassifier with class-weight balancing and early stopping."""
+    scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
+    print(f"scale_pos_weight : {scale_pos_weight:.3f}")
+
+    model = XGBClassifier(
+        n_estimators=300,
+        max_depth=5,
+        learning_rate=0.05,
+        eval_metric="auc",
+        scale_pos_weight=scale_pos_weight,
+        random_state=42,
+        verbosity=0,
+    )
+    model.fit(
+        X_train, y_train,
+        early_stopping_rounds=20,
+        eval_set=[(X_test, y_test)],
+        verbose=False,
+    )
+
+    best_iter = model.best_iteration
+    print(f"best iteration   : {best_iter}")
+    return model
+
+
+def evaluate_classifier(model, X_test, y_test):
+    """Return metrics dict; also prints AUC, precision, recall, F1."""
+    import matplotlib.pyplot as plt
+
+    y_prob = model.predict_proba(X_test)[:, 1]
+    y_pred = (y_prob >= 0.5).astype(int)
+
+    auc = roc_auc_score(y_test, y_prob)
+    report = classification_report(y_test, y_pred, output_dict=True)
+
+    print(f"AUC-ROC   : {auc:.4f}")
+    print(classification_report(y_test, y_pred, target_names=["active", "churned"]))
+
+    # confusion matrix
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+
+    cm = confusion_matrix(y_test, y_pred)
+    disp = ConfusionMatrixDisplay(cm, display_labels=["active", "churned"])
+    disp.plot(ax=axes[0], colorbar=False, cmap="Blues")
+    axes[0].set_title("Confusion Matrix")
+
+    RocCurveDisplay.from_predictions(y_test, y_prob, ax=axes[1], name="XGBoost")
+    axes[1].plot([0, 1], [0, 1], "k--", lw=1)
+    axes[1].set_title(f"ROC Curve  (AUC = {auc:.3f})")
+
+    plt.tight_layout()
+    plt.show()
+
+    return {
+        "auc": auc,
+        "precision": report["churned"]["precision"],
+        "recall": report["churned"]["recall"],
+        "f1": report["churned"]["f1-score"],
+        "y_prob": y_prob,
+    }
