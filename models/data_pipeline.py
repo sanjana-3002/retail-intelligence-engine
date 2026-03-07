@@ -35,3 +35,34 @@ def load_raw_data(filepath=RAW_DATA_PATH):
     print(f"missing customer_id : {missing:,}  ({pct:.1f}%)")
 
     return df
+
+
+def extract_signal_before_cleaning(df):
+    # total positive order lines across the whole dataset
+    total_positive = df[df["quantity"] > 0].shape[0]
+
+    # return rate — negative quantity rows count as a return event
+    returns = (
+        df[(df["quantity"] < 0) & df["customer_id"].notna()]
+        .groupby("customer_id")
+        .size()
+        .reset_index(name="return_count")
+    )
+    returns["return_rate"] = returns["return_count"] / total_positive
+    return_features = returns[["customer_id", "return_rate"]]
+
+    # cancellation rate — invoices starting with 'C'
+    total_invoices = df["invoice_no"].nunique()
+    cancelled = (
+        df[df["invoice_no"].astype(str).str.startswith("C") & df["customer_id"].notna()]
+        .groupby("customer_id")["invoice_no"]
+        .nunique()
+        .reset_index(name="cancelled_invoices")
+    )
+    cancelled["cancellation_rate"] = cancelled["cancelled_invoices"] / total_invoices
+    cancel_features = cancelled[["customer_id", "cancellation_rate"]]
+
+    print(f"return_features shape  : {return_features.shape}")
+    print(f"cancel_features shape  : {cancel_features.shape}")
+
+    return return_features, cancel_features
