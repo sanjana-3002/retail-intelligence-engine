@@ -106,3 +106,29 @@ def clean_data(df):
     print(f"df_customers : {len(df_customers):,}  |  df_all : {len(df_all):,}")
 
     return df_customers, df_all
+
+
+def calculate_rfm(df, snapshot_date=None):
+    if snapshot_date is None:
+        snapshot_date = df["invoice_date"].max() + pd.Timedelta(days=1)
+
+    rfm = (
+        df.groupby("customer_id")
+        .agg(
+            last_purchase=("invoice_date", "max"),
+            first_purchase=("invoice_date", "min"),
+            frequency=("invoice_no", "nunique"),
+            monetary=("revenue", "mean"),       # mean, not sum — required for Gamma-Gamma
+            total_revenue=("revenue", "sum"),
+            total_items=("quantity", "sum"),
+        )
+        .reset_index()
+    )
+
+    rfm["recency"] = (snapshot_date - rfm["last_purchase"]).dt.days
+    rfm["customer_tenure_days"] = (rfm["last_purchase"] - rfm["first_purchase"]).dt.days
+
+    print("\nRFM summary:")
+    print(rfm[["recency", "frequency", "monetary", "total_revenue"]].describe().round(2))
+
+    return rfm
