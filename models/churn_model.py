@@ -192,3 +192,93 @@ def predict_survival_days(cph, customer_features):
         if prob.iloc[0] <= 0.5:
             return float(t)
     return float("inf")
+
+
+def compute_treatment_proxy(df_transactions, master):
+    """
+    Build a treatment flag per customer using a price-discount proxy.
+
+    A transaction is treated if its unit_price < 80 % of the median unit_price
+    for that stock_code.  A customer is treated=1 if they had any treated transaction.
+    """
+    # median price per product
+    median_price = (
+        df_transactions.groupby("stock_code")["unit_price"]
+        .median()
+        .reset_index()
+        .rename(columns={"unit_price": "median_price"})
+    )
+    df = df_transactions.merge(median_price, on="stock_code", how="left")
+    df["tx_treated"] = (df["unit_price"] < 0.8 * df["median_price"]).astype(int)
+
+    treatment = (
+        df.groupby("customer_id")["tx_treated"]
+        .max()          # 1 if any treated transaction
+        .reset_index()
+        .rename(columns={"tx_treated": "treatment"})
+    )
+
+    result = master.merge(treatment, on="customer_id", how="left")
+    result["treatment"] = result["treatment"].fillna(0).astype(int)
+
+    n_treated = result["treatment"].sum()
+    print(f"treated customers  : {n_treated:,}  ({n_treated / len(result) * 100:.1f}%)")
+    print(f"control customers  : {len(result) - n_treated:,}")
+    return result
+
+
+def fit_uplift_tlearner(X, y, treatment):
+    """
+    T-Learner uplift model: two XGBoost classifiers predicting churn,
+    one trained on treated customers, one on control customers.
+
+    Returns (model_t, model_c).
+    """
+    mask_t = treatment == 1
+    mask_c = treatment == 0
+
+    model_t = XGBClassifier(n_estimators=200, max_depth=4, learning_rate=0.05,
+                            random_state=42, verbosity=0)
+    model_c = XGBClassifier(n_estimators=200, max_depth=4, learning_rate=0.05,
+                            random_state=42, verbosity=0)
+
+    model_t.fit(X[mask_t], y[mask_t])
+    model_c.fit(X[mask_c], y[mask_c])
+
+    print(f"Model_T trained on {mask_t.sum():,} treated customers")
+    print(f"Model_C trained on {mask_c.sum():,} control customers")
+    return model_t, model_c
+
+
+def score_uplift(model_t, model_c, X, master_with_label):
+    """
+    Compute uplift scores and assign customer segments.
+
+    uplift_score = P(churn | treated) - P(churn | control)
+
+    Segments
+    --------
+    persuadable   : churned=1 AND uplift >  0.1  — worth targeting
+    lost_cause    : churned=1 AND uplift <= 0.1  — unlikely to respond
+    sleeping_dog  : churned=0 AND uplift >  0.1  — intervention may backfire
+    sure_thing    : churned=0 AND uplift <= 0.1  — loyal, no action needed
+    """
+    prob_t = model_t.predict_proba(X)[:, 1]
+    prob_c = model_c.predict_proba(X)[:, 1]
+    uplift = prob_t - prob_c
+
+    df = master_with_label.copy().reset_index(drop=True)
+    df["uplift_score"] = uplift
+
+    conditions = [
+        (df["churned"] == 1) & (df["uplift_score"] >  0.1),
+        (df["churned"] == 1) & (df["uplift_score"] <= 0.1),
+        (df["churned"] == 0) & (df["uplift_score"] >  0.1),
+        (df["churned"] == 0) & (df["uplift_score"] <= 0.1),
+    ]
+    labels = ["persuadable", "lost_cause", "sleeping_dog", "sure_thing"]
+    df["customer_segment"] = np.select(conditions, labels, default="unknown")
+
+    print("Uplift segment distribution:")
+    print(df["customer_segment"].value_counts())
+    return df
