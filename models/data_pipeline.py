@@ -132,3 +132,24 @@ def calculate_rfm(df, snapshot_date=None):
     print(rfm[["recency", "frequency", "monetary", "total_revenue"]].describe().round(2))
 
     return rfm
+
+
+def engineer_features(df, rfm):
+    df = df.copy()
+
+    # 1. velocity_decay_ratio — are purchase gaps getting longer over time?
+    def _velocity_decay(dates):
+        dates = sorted(dates)
+        if len(dates) < 4:
+            return 1.0
+        gaps = [(dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)]
+        mid = len(gaps) // 2
+        first_avg = np.mean(gaps[:mid]) if mid > 0 else 1.0
+        second_avg = np.mean(gaps[mid:]) if len(gaps[mid:]) > 0 else 1.0
+        return second_avg / first_avg if first_avg > 0 else 1.0
+
+    vdr = (
+        df.groupby("customer_id")["invoice_date"]
+        .apply(lambda x: _velocity_decay(list(x)))
+        .reset_index(name="velocity_decay_ratio")
+    )
