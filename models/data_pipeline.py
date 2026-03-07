@@ -237,3 +237,22 @@ def build_cohort_matrix(df):
 
     print(f"cohort matrix: {retention_matrix.shape[0]} cohorts x {retention_matrix.shape[1]} months")
     return retention_matrix, cohort_size
+
+
+def build_master_customer_table(df_customers, return_features, cancel_features):
+    rfm = calculate_rfm(df_customers)
+    master = engineer_features(df_customers, rfm)
+
+    # bring in the pre-cleaning behavioural signals
+    master = master.merge(return_features, on="customer_id", how="left")
+    master = master.merge(cancel_features, on="customer_id", how="left")
+
+    master = master.fillna(0)
+
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    master.to_csv(PROCESSED_DIR / "customer_features.csv", index=False)
+
+    print(f"\nmaster table : {master.shape[0]} customers, {master.shape[1]} features")
+    print(f"columns      : {list(master.columns)}")
+
+    return master
