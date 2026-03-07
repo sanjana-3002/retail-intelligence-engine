@@ -132,3 +132,33 @@ def save_models(bgf, ggf):
     joblib.dump(bgf, MODELS_DIR / "bgf.pkl")
     joblib.dump(ggf, MODELS_DIR / "ggf.pkl")
     print("saved models/bgf.pkl and models/ggf.pkl")
+
+
+def build_clv_scores(master_df):
+    clv_df = prepare_clv_data(master_df)
+
+    bgf = fit_bgnbd(clv_df)
+    predicted_purchases_90d, prob_alive = predict_purchases(bgf, clv_df)
+
+    check_gg_assumption(clv_df)
+    ggf = fit_gamma_gamma(clv_df)
+    expected_avg_order_value, clv_90d, clv_365d = score_clv(bgf, ggf, clv_df)
+
+    scores = pd.DataFrame({
+        "customer_id":               clv_df["customer_id"].values,
+        "frequency_repeat":          clv_df["frequency_repeat"].values,
+        "prob_alive":                prob_alive.values,
+        "predicted_purchases_90d":   predicted_purchases_90d.values,
+        "expected_avg_order_value":  expected_avg_order_value.values,
+        "clv_90d":                   clv_90d.values,
+        "clv_365d":                  clv_365d.values,
+    })
+
+    save_models(bgf, ggf)
+
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    scores.to_csv(PROCESSED_DIR / "clv_scores.csv", index=False)
+    print(f"\nsaved clv_scores.csv — {len(scores):,} customers")
+    print(scores[["clv_90d", "clv_365d", "prob_alive"]].describe().round(2))
+
+    return scores, bgf, ggf
