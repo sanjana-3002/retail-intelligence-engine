@@ -91,3 +91,37 @@ def fit_gamma_gamma(clv_df):
     print("Gamma-Gamma fitted:")
     print(ggf)
     return ggf
+
+
+def score_clv(bgf, ggf, clv_df):
+    expected_avg_order_value = ggf.conditional_expected_average_profit(
+        clv_df["frequency_repeat"],
+        clv_df["monetary"],
+    )
+
+    # 365-day CLV — time=12 months, 1% monthly discount rate
+    clv_365d = ggf.customer_lifetime_value(
+        bgf,
+        clv_df["frequency_repeat"],
+        clv_df["recency_bgnbd"],
+        clv_df["T_bgnbd"],
+        clv_df["monetary"],
+        time=12,
+        discount_rate=0.01,
+    )
+
+    # 90-day CLV — time=3 months
+    clv_90d = ggf.customer_lifetime_value(
+        bgf,
+        clv_df["frequency_repeat"],
+        clv_df["recency_bgnbd"],
+        clv_df["T_bgnbd"],
+        clv_df["monetary"],
+        time=3,
+        discount_rate=0.01,
+    )
+
+    print(f"median CLV 90d  : £{clv_90d.median():.2f}")
+    print(f"median CLV 365d : £{clv_365d.median():.2f}")
+
+    return expected_avg_order_value, clv_90d, clv_365d
