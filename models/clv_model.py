@@ -125,3 +125,10 @@ def score_clv(bgf, ggf, clv_df):
     print(f"median CLV 365d : £{clv_365d.median():.2f}")
 
     return expected_avg_order_value, clv_90d, clv_365d
+
+
+def save_models(bgf, ggf):
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    joblib.dump(bgf, MODELS_DIR / "bgf.pkl")
+    joblib.dump(ggf, MODELS_DIR / "ggf.pkl")
+    print("saved models/bgf.pkl and models/ggf.pkl")
