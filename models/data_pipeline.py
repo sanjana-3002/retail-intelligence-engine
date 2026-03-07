@@ -153,3 +153,24 @@ def engineer_features(df, rfm):
         .apply(lambda x: _velocity_decay(list(x)))
         .reset_index(name="velocity_decay_ratio")
     )
+
+    # 2. category_hhi — how concentrated is each customer's buying across categories?
+    df["category"] = df["stock_code"].astype(str).str[:2]
+
+    def _hhi(series):
+        shares = series.value_counts(normalize=True)
+        return (shares ** 2).sum()
+
+    cat_hhi = (
+        df.groupby("customer_id")["category"]
+        .apply(_hhi)
+        .reset_index(name="category_hhi")
+    )
+
+    # 3. spend_cv — coefficient of variation of spend per transaction
+    spend_cv = (
+        df.groupby("customer_id")["revenue"]
+        .agg(lambda x: x.std() / x.mean() if x.mean() != 0 else 0.0)
+        .reset_index(name="spend_cv")
+    )
+    spend_cv["spend_cv"] = spend_cv["spend_cv"].fillna(0)
