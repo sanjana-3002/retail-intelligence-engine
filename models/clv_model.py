@@ -35,3 +35,15 @@ def prepare_clv_data(master_df):
     print(f"one-time buyers dropped             : {len(df) - len(clv_df):,}")
 
     return clv_df
+
+
+def fit_bgnbd(clv_df):
+    bgf = BetaGeoFitter(penalizer_coef=0.01)
+    bgf.fit(
+        clv_df["frequency_repeat"],
+        clv_df["recency_bgnbd"],
+        clv_df["T_bgnbd"],
+    )
+    print("BG/NBD fitted:")
+    print(bgf)
+    return bgf
