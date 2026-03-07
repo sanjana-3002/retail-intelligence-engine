@@ -15,3 +15,23 @@ warnings.filterwarnings("ignore")
 
 MODELS_DIR = Path("models")
 PROCESSED_DIR = Path("data/processed")
+
+
+def prepare_clv_data(master_df):
+    df = master_df.copy()
+
+    # BG/NBD needs frequency_repeat = total orders - 1 (repeat purchases only)
+    df["frequency_repeat"] = df["frequency"] - 1
+
+    # recency  = days from first purchase to last purchase
+    # T        = customer_tenure_days (same variable per spec)
+    df["recency_bgnbd"] = df["customer_tenure_days"]
+    df["T_bgnbd"] = df["customer_tenure_days"]
+
+    # keep only customers who made at least 2 purchases
+    clv_df = df[df["frequency_repeat"] >= 1].copy()
+
+    print(f"eligible customers (>=2 purchases) : {len(clv_df):,}")
+    print(f"one-time buyers dropped             : {len(df) - len(clv_df):,}")
+
+    return clv_df
