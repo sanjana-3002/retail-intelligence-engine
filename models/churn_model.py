@@ -119,3 +119,37 @@ def evaluate_classifier(model, X_test, y_test):
         "f1": report["churned"]["f1-score"],
         "y_prob": y_prob,
     }
+
+
+def get_shap_values(model, X_test):
+    """Compute SHAP values for X_test using TreeExplainer."""
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(X_test)
+    print(f"shap_values shape : {np.array(shap_values).shape}")
+    return explainer, shap_values
+
+
+def get_top_shap_drivers(explainer, customer_features, n=3):
+    """
+    Return the top-n SHAP drivers for a single customer.
+
+    Parameters
+    ----------
+    explainer        : shap.TreeExplainer fitted on the XGBoost churn model
+    customer_features: pd.DataFrame with exactly one row (the customer's features)
+    n                : number of top drivers to return
+
+    Returns
+    -------
+    list of (feature_name, shap_value) tuples sorted by |shap_value| descending
+    """
+    sv = explainer.shap_values(customer_features)
+    sv_flat = np.array(sv).flatten()
+    feature_names = list(customer_features.columns)
+
+    pairs = sorted(
+        zip(feature_names, sv_flat),
+        key=lambda x: abs(x[1]),
+        reverse=True,
+    )
+    return pairs[:n]
