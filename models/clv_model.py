@@ -67,3 +67,19 @@ def predict_purchases(bgf, clv_df):
     print(f"median prob alive                : {prob_alive.median():.3f}")
 
     return predicted_purchases_90d, prob_alive
+
+
+def check_gg_assumption(clv_df):
+    # gamma-gamma requires frequency and monetary to be independent
+    corr = clv_df["frequency_repeat"].corr(clv_df["monetary"])
+    print(f"Pearson correlation (frequency vs monetary): {corr:.4f}")
+
+    if abs(corr) > 0.3:
+        print(
+            "WARNING: |correlation| > 0.3 — the Gamma-Gamma independence assumption "
+            "may be violated. CLV estimates could be biased."
+        )
+    else:
+        print("assumption check passed: frequency and monetary look approximately independent")
+
+    return corr
