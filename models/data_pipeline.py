@@ -256,3 +256,32 @@ def build_master_customer_table(df_customers, return_features, cancel_features):
     print(f"columns      : {list(master.columns)}")
 
     return master
+
+
+if __name__ == "__main__":
+    # 1. load both sheets
+    df_raw = load_raw_data()
+
+    # 2. extract return/cancel signals BEFORE we drop any rows
+    return_features, cancel_features = extract_signal_before_cleaning(df_raw)
+
+    # 3. clean
+    df_customers, df_all = clean_data(df_raw)
+
+    # 4. build the master customer feature table
+    master = build_master_customer_table(df_customers, return_features, cancel_features)
+
+    # 5. build and save cohort retention matrix
+    retention_matrix, cohort_size = build_cohort_matrix(df_customers)
+    retention_matrix.to_csv(PROCESSED_DIR / "cohort_retention.csv")
+    print("saved cohort_retention.csv")
+
+    # 6. save all cleaned transactions
+    df_all.to_csv(PROCESSED_DIR / "all_transactions.csv", index=False)
+    print("saved all_transactions.csv")
+
+    # 7. final summary
+    print(f"\nunique customers : {master['customer_id'].nunique():,}")
+    print(f"feature count    : {master.shape[1]}")
+    print("\nmedian RFM values:")
+    print(master[["recency", "frequency", "monetary"]].median().round(2))
