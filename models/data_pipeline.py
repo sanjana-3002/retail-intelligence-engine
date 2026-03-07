@@ -66,3 +66,43 @@ def extract_signal_before_cleaning(df):
     print(f"cancel_features shape  : {cancel_features.shape}")
 
     return return_features, cancel_features
+
+
+def clean_data(df):
+    df = df.copy()
+    print(f"starting rows : {len(df):,}")
+
+    # 1. add revenue column
+    df["revenue"] = df["quantity"] * df["unit_price"]
+    print(f"after adding revenue        : {len(df):,}")
+
+    # 2. flag cancellation invoices
+    df["is_cancelled"] = df["invoice_no"].astype(str).str.startswith("C")
+    print(f"after adding is_cancelled   : {len(df):,}")
+
+    # 3. drop negative quantities
+    df = df[df["quantity"] >= 0]
+    print(f"after removing quantity < 0 : {len(df):,}")
+
+    # 4. drop cancellation rows
+    df = df[df["is_cancelled"] == False]
+    print(f"after removing cancellations: {len(df):,}")
+
+    # 5. drop zero or negative price
+    df = df[df["unit_price"] > 0]
+    print(f"after removing price <= 0   : {len(df):,}")
+
+    # 6. drop non-product stock codes
+    non_product = {
+        "POST", "D", "M", "DOT", "CRUK", "C2",
+        "BANK CHARGES", "PADS", "AMAZONFEE", "S", "ADJUST", "ADJUST2"
+    }
+    df = df[~df["stock_code"].astype(str).str.upper().isin(non_product)]
+    print(f"after removing non-product  : {len(df):,}")
+
+    # 7. split into customers-only and full sets
+    df_customers = df[df["customer_id"].notna()].copy()
+    df_all = df.copy()
+    print(f"df_customers : {len(df_customers):,}  |  df_all : {len(df_all):,}")
+
+    return df_customers, df_all
