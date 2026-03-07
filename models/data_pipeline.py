@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
-RAW_DATA_PATH = Path("data/raw/online_retail_II.xlsx")
+RAW_DATA_PATH = Path("data/raw/online_retail_II.xlsx")  # download from archive.ics.uci.edu/dataset/502/online+retail+ii
 PROCESSED_DIR = Path("data/processed")
 
 
@@ -85,7 +85,7 @@ def clean_data(df):
     print(f"after removing quantity < 0 : {len(df):,}")
 
     # 4. drop cancellation rows
-    df = df[df["is_cancelled"] == False]
+    df = df[~df["is_cancelled"]]
     print(f"after removing cancellations: {len(df):,}")
 
     # 5. drop zero or negative price
