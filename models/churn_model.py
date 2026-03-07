@@ -282,3 +282,40 @@ def score_uplift(model_t, model_c, X, master_with_label):
     print("Uplift segment distribution:")
     print(df["customer_segment"].value_counts())
     return df
+
+
+def build_full_intelligence_table(master, clv_scores, churn_scores, cox_survival, uplift_scores):
+    """
+    Merge all model outputs into one customer-level intelligence table.
+
+    Parameters
+    ----------
+    master        : pd.DataFrame — base customer features (from data_pipeline)
+    clv_scores    : pd.DataFrame — clv_90d, clv_365d, prob_alive, … (customer_id key)
+    churn_scores  : pd.DataFrame — customer_id + churn_probability
+    cox_survival  : pd.DataFrame — customer_id + predicted_survival_days
+    uplift_scores : pd.DataFrame — customer_id + uplift_score + customer_segment
+
+    Returns
+    -------
+    pd.DataFrame saved to data/processed/full_customer_intelligence.csv
+    """
+    intel = master[["customer_id"]].copy()
+
+    for df, cols in [
+        (master,        list(master.columns)),
+        (clv_scores,    [c for c in clv_scores.columns if c != "customer_id"]),
+        (churn_scores,  [c for c in churn_scores.columns if c != "customer_id"]),
+        (cox_survival,  [c for c in cox_survival.columns if c != "customer_id"]),
+        (uplift_scores, [c for c in uplift_scores.columns if c != "customer_id"]),
+    ]:
+        intel = intel.merge(df[["customer_id"] + cols].drop_duplicates("customer_id"),
+                            on="customer_id", how="left")
+
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = PROCESSED_DIR / "full_customer_intelligence.csv"
+    intel.to_csv(out_path, index=False)
+
+    print(f"full_customer_intelligence.csv : {intel.shape[0]:,} rows × {intel.shape[1]} columns")
+    print(f"saved to {out_path}")
+    return intel
