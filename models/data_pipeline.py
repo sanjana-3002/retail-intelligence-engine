@@ -206,3 +206,34 @@ def engineer_features(df, rfm):
 
     print(f"enriched feature table: {enriched.shape[0]} customers, {enriched.shape[1]} columns")
     return enriched
+
+
+def build_cohort_matrix(df):
+    df = df.copy()
+
+    # assign each transaction to a calendar month
+    df["invoice_month"] = df["invoice_date"].dt.to_period("M")
+
+    # find the first month each customer ever bought — that's their cohort
+    cohort_map = (
+        df.groupby("customer_id")["invoice_month"]
+        .min()
+        .reset_index()
+        .rename(columns={"invoice_month": "cohort_month"})
+    )
+    df = df.merge(cohort_map, on="customer_id", how="left")
+
+    # months since first purchase
+    df["cohort_index"] = (df["invoice_month"] - df["cohort_month"]).apply(lambda x: x.n)
+
+    pivot = (
+        df.groupby(["cohort_month", "cohort_index"])["customer_id"]
+        .nunique()
+        .unstack(fill_value=0)
+    )
+
+    cohort_size = pivot[0]
+    retention_matrix = pivot.divide(cohort_size, axis=0)
+
+    print(f"cohort matrix: {retention_matrix.shape[0]} cohorts x {retention_matrix.shape[1]} months")
+    return retention_matrix, cohort_size
