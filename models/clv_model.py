@@ -83,3 +83,11 @@ def check_gg_assumption(clv_df):
         print("assumption check passed: frequency and monetary look approximately independent")
 
     return corr
+
+
+def fit_gamma_gamma(clv_df):
+    ggf = GammaGammaFitter(penalizer_coef=0.01)
+    ggf.fit(clv_df["frequency_repeat"], clv_df["monetary"])
+    print("Gamma-Gamma fitted:")
+    print(ggf)
+    return ggf
