@@ -162,3 +162,26 @@ def build_clv_scores(master_df):
     print(scores[["clv_90d", "clv_365d", "prob_alive"]].describe().round(2))
 
     return scores, bgf, ggf
+
+
+if __name__ == "__main__":
+    import sys
+    sys.path.append(str(Path(__file__).parent.parent))
+
+    from models.data_pipeline import (
+        load_raw_data,
+        extract_signal_before_cleaning,
+        clean_data,
+        build_master_customer_table,
+    )
+
+    df_raw = load_raw_data()
+    return_features, cancel_features = extract_signal_before_cleaning(df_raw)
+    df_customers, _ = clean_data(df_raw)
+    master = build_master_customer_table(df_customers, return_features, cancel_features)
+
+    scores, bgf, ggf = build_clv_scores(master)
+
+    print(f"\nmedian CLV 90d   : £{scores['clv_90d'].median():.2f}")
+    print(f"median CLV 365d  : £{scores['clv_365d'].median():.2f}")
+    print(f"% customers alive: {(scores['prob_alive'] > 0.5).mean() * 100:.1f}%")
