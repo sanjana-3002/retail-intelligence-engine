@@ -174,3 +174,35 @@ def engineer_features(df, rfm):
         .reset_index(name="spend_cv")
     )
     spend_cv["spend_cv"] = spend_cv["spend_cv"].fillna(0)
+
+    # 4. country_count — how many different countries has this customer shopped from?
+    country_count = (
+        df.groupby("customer_id")["country"]
+        .nunique()
+        .reset_index(name="country_count")
+    )
+
+    # 5. primary_country — the country this customer shops from most
+    primary_country = (
+        df.groupby("customer_id")["country"]
+        .agg(lambda x: x.value_counts().index[0])
+        .reset_index(name="primary_country")
+    )
+
+    # 6. avg_items_per_order — average basket size across all orders
+    avg_items = (
+        df.groupby(["customer_id", "invoice_no"])["quantity"]
+        .sum()
+        .reset_index()
+        .groupby("customer_id")["quantity"]
+        .mean()
+        .reset_index(name="avg_items_per_order")
+    )
+
+    # merge everything onto the rfm table
+    enriched = rfm.copy()
+    for feat_df in [vdr, cat_hhi, spend_cv, country_count, primary_country, avg_items]:
+        enriched = enriched.merge(feat_df, on="customer_id", how="left")
+
+    print(f"enriched feature table: {enriched.shape[0]} customers, {enriched.shape[1]} columns")
+    return enriched
