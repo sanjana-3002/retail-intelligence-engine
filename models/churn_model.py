@@ -153,3 +153,42 @@ def get_top_shap_drivers(explainer, customer_features, n=3):
         reverse=True,
     )
     return pairs[:n]
+
+
+def fit_cox_model(df_cox):
+    """
+    Fit a Cox Proportional Hazards model.
+
+    Duration column : customer_tenure_days
+    Event column    : churned  (0 = censored / still active, 1 = churned)
+    """
+    cph = CoxPHFitter()
+    cph.fit(
+        df_cox,
+        duration_col="customer_tenure_days",
+        event_col="churned",
+        show_progress=False,
+    )
+    print("Cox PH model fitted.")
+    return cph
+
+
+def predict_survival_days(cph, customer_features):
+    """
+    Return the median survival time (days) for a single customer.
+
+    Parameters
+    ----------
+    cph               : fitted CoxPHFitter
+    customer_features : pd.DataFrame with one row containing Cox covariates
+
+    Returns
+    -------
+    float — median expected days until churn (or np.inf if > observation window)
+    """
+    sf = cph.predict_survival_function(customer_features)
+    # find the time at which survival probability first drops to or below 0.5
+    for t, prob in sf.iterrows():
+        if prob.iloc[0] <= 0.5:
+            return float(t)
+    return float("inf")
