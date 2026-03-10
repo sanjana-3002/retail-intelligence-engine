@@ -177,3 +177,37 @@ def build_anomaly_features(df_all):
     ]
     X = df[feature_cols].fillna(0).values
     return X, df
+
+
+def fit_isolation_forest(X):
+    """Fit Isolation Forest and save model to disk."""
+    iso_forest = IsolationForest(
+        contamination=0.01, random_state=42, n_estimators=100
+    )
+    iso_forest.fit(X)
+    joblib.dump(iso_forest, MODELS_DIR / "isolation_forest.pkl")
+    return iso_forest
+
+
+def score_anomalies(iso_forest, X, df_flagged):
+    """Add anomaly_flag and anomaly_score columns to df_flagged."""
+    df = df_flagged.copy()
+    predictions = iso_forest.predict(X)
+    df["anomaly_flag"] = (predictions == -1).astype(int)
+    df["anomaly_score"] = iso_forest.decision_function(X)
+
+    total = df["anomaly_flag"].sum()
+    pct = df["anomaly_flag"].mean() * 100
+    print(f"Total anomalies: {total:,}  ({pct:.2f}%)")
+    print("Top 10 most anomalous transactions:")
+    print(df.nsmallest(10, "anomaly_score")[
+        ["invoice_no", "customer_id", "stock_code", "quantity", "unit_price", "anomaly_score"]
+    ].to_string(index=False))
+    return df
+
+
+def save_anomaly_flags(df_flagged):
+    """Save anomaly-scored transactions to CSV."""
+    out_path = PROCESSED_DIR / "anomaly_flags.csv"
+    df_flagged.to_csv(out_path, index=False)
+    print(f"anomaly_flags.csv saved — shape: {df_flagged.shape}")
