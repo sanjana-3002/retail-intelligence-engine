@@ -130,3 +130,50 @@ def save_demand_forecasts(records):
     out_path = PROCESSED_DIR / "demand_forecasts.csv"
     df.to_csv(out_path, index=False)
     print(f"demand_forecasts.csv saved — shape: {df.shape}")
+
+
+def build_anomaly_features(df_all):
+    """Engineer features for Isolation Forest anomaly detection."""
+    df = df_all.copy()
+
+    # Order value and per-customer z-score
+    df["order_value"] = df["quantity"] * df["unit_price"]
+    customer_stats = (
+        df[df["customer_id"].notna()]
+        .groupby("customer_id")["order_value"]
+        .agg(["mean", "std"])
+    )
+    df = df.merge(
+        customer_stats.rename(columns={"mean": "_ov_mean", "std": "_ov_std"}),
+        on="customer_id",
+        how="left",
+    )
+    df["order_value_zscore"] = (
+        (df["order_value"] - df["_ov_mean"]) / df["_ov_std"]
+    ).fillna(0)
+    df.drop(columns=["_ov_mean", "_ov_std"], inplace=True)
+
+    # Time features
+    df["hour_of_day"] = df["invoice_date"].dt.hour
+    df["day_of_week"] = df["invoice_date"].dt.dayofweek
+
+    # Primary country per customer
+    cust_features = pd.read_csv(PROCESSED_DIR / "customer_features.csv")
+    if "primary_country" in cust_features.columns:
+        country_map = cust_features.set_index("customer_id")["primary_country"]
+        df["primary_country"] = df["customer_id"].map(country_map)
+        df["is_new_country"] = (df["country"] != df["primary_country"]).astype(int)
+    else:
+        df["is_new_country"] = 0
+
+    # Anonymous rows: zero out identity-dependent features
+    anon_mask = df["customer_id"].isna()
+    df.loc[anon_mask, "is_new_country"] = 0
+    df.loc[anon_mask, "order_value_zscore"] = 0
+
+    feature_cols = [
+        "order_value", "order_value_zscore", "quantity",
+        "hour_of_day", "day_of_week", "is_new_country",
+    ]
+    X = df[feature_cols].fillna(0).values
+    return X, df
