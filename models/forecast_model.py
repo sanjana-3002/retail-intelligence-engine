@@ -14,3 +14,21 @@ warnings.filterwarnings("ignore")
 
 MODELS_DIR = Path("models")
 PROCESSED_DIR = Path("data/processed")
+
+
+def build_weekly_revenue(df_all):
+    """Aggregate weekly revenue per product category; return top-5 categories."""
+    df = df_all.copy()
+    df["category"] = df["stock_code"].astype(str).str[:2]
+    df = df[df["revenue"] > 0]
+    df["week"] = df["invoice_date"].dt.to_period("W")
+    weekly_df = (
+        df.groupby(["category", "week"], as_index=False)["revenue"].sum()
+    )
+    top5_categories = (
+        weekly_df.groupby("category")["revenue"]
+        .sum()
+        .nlargest(5)
+        .index.tolist()
+    )
+    return weekly_df, top5_categories
