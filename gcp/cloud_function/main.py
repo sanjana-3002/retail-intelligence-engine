@@ -255,3 +255,50 @@ def _write_anomaly(bq: bigquery.Client, msg: dict, results: dict, ts: datetime) 
     errors = bq.insert_rows_json(f"{PROJECT_ID}.{DATASET_ID}.anomalies", [row])
     if errors:
         logger.warning("anomalies write errors: %s", errors)
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+def process_transaction(event: dict, context) -> str:
+    """
+    Cloud Function entry point — triggered by Pub/Sub on retail-transactions topic.
+
+    Returns '200' on success, '400' on parse failure.
+    """
+    # 1. Decode Pub/Sub message
+    try:
+        raw = base64.b64decode(event["data"]).decode("utf-8")
+        msg = json.loads(raw)
+    except Exception as exc:
+        logger.error("failed to decode message: %s", exc)
+        return "400"
+
+    logger.info(
+        "received invoice_no=%s customer_id=%s",
+        msg.get("invoice_no"), msg.get("customer_id"),
+    )
+
+    # 2. Ensure models are loaded (no-op on warm start)
+    _load_models()
+
+    ts = datetime.now(tz=timezone.utc)
+    bq = bigquery.Client(project=PROJECT_ID)
+
+    # 3. Feature extraction
+    customer_stats               = _get_customer_stats(bq, msg.get("customer_id", ""))
+    churn_features, anomaly_features = _build_feature_vectors(msg, customer_stats)
+
+    # 4. Inference
+    results = _run_inference(msg, churn_features, anomaly_features)
+    logger.info("inference: %s", results)
+
+    # 5. Write to BigQuery
+    _write_event(bq, msg, ts)
+    _write_prediction(bq, msg, results, ts)
+
+    if results.get("anomaly_flag") == 1:
+        _write_anomaly(bq, msg, results, ts)
+        logger.info("anomaly flagged — invoice_no=%s", msg.get("invoice_no"))
+
+    return "200"
