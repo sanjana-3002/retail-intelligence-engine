@@ -122,3 +122,11 @@ def plot_dual_forecast(category, history, sarima_fc, prophet_fc):
     ax.legend()
     plt.tight_layout()
     plt.show()
+
+
+def save_demand_forecasts(records):
+    """Save list-of-dicts demand forecast records to CSV."""
+    df = pd.DataFrame(records)
+    out_path = PROCESSED_DIR / "demand_forecasts.csv"
+    df.to_csv(out_path, index=False)
+    print(f"demand_forecasts.csv saved — shape: {df.shape}")
