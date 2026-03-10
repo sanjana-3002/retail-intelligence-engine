@@ -45,3 +45,22 @@ def run_adf_test(series, category):
         f"p={p_value:.4f}  stationary={stationary}"
     )
     return p_value
+
+
+def fit_sarima(series, category):
+    """Fit SARIMAX(1,1,1)(1,1,0,52) to a weekly revenue series. Saves model pkl."""
+    p_value = run_adf_test(series, category)
+    if p_value > 0.05:
+        series = series.diff().dropna()
+
+    model = SARIMAX(
+        series,
+        order=(1, 1, 1),
+        seasonal_order=(1, 1, 0, 52),
+        enforce_stationarity=False,
+        enforce_invertibility=False,
+    )
+    results = model.fit(disp=False)
+    print(f"[SARIMA] Category={category}  AIC={results.aic:.2f}")
+    joblib.dump(results, MODELS_DIR / f"sarima_{category}.pkl")
+    return results
