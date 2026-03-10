@@ -80,3 +80,48 @@ def publish_with_retry(
                 return False
             time.sleep(0.5 * attempt)
     return False
+
+
+def replay(speed: float = 1.0) -> None:
+    """Stream all transactions to Pub/Sub at the configured speed."""
+    if not PROJECT_ID:
+        raise EnvironmentError("GCP_PROJECT_ID environment variable is not set.")
+
+    df = load_transactions(DATA_PATH)
+    publisher = pubsub_v1.PublisherClient()
+    topic_path = publisher.topic_path(PROJECT_ID, TOPIC_ID)
+    delay = DEFAULT_DELAY / speed
+
+    published = 0
+    skipped   = 0
+
+    print(f"\nstarting replay → {topic_path}  (delay={delay:.3f}s per message)")
+
+    for i, row in df.iterrows():
+        data = build_message(row.to_dict())
+        ok = publish_with_retry(publisher, topic_path, data)
+        if ok:
+            published += 1
+        else:
+            skipped += 1
+
+        if (i + 1) % 1000 == 0:
+            print(f"  {i + 1:,} processed  |  published={published:,}  skipped={skipped}")
+
+        time.sleep(delay)
+
+    print(f"\nreplay complete — published={published:,}  skipped={skipped}  total={len(df):,}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Replay transactions to Pub/Sub.")
+    parser.add_argument(
+        "--speed", type=float, default=1.0,
+        help="Speed multiplier (default 1.0 = 0.05s delay). Higher = faster.",
+    )
+    args = parser.parse_args()
+    replay(speed=args.speed)
+
+
+if __name__ == "__main__":
+    main()
