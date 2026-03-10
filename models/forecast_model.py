@@ -64,3 +64,15 @@ def fit_sarima(series, category):
     print(f"[SARIMA] Category={category}  AIC={results.aic:.2f}")
     joblib.dump(results, MODELS_DIR / f"sarima_{category}.pkl")
     return results
+
+
+def forecast_sarima(results, steps=12):
+    """Generate SARIMA forecast with 95% confidence intervals."""
+    forecast = results.get_forecast(steps=steps)
+    ci = forecast.conf_int()
+    fc_df = pd.DataFrame({
+        "sarima_forecast": forecast.predicted_mean.values,
+        "lower_ci": ci.iloc[:, 0].values,
+        "upper_ci": ci.iloc[:, 1].values,
+    })
+    return fc_df
