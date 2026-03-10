@@ -76,3 +76,16 @@ def forecast_sarima(results, steps=12):
         "upper_ci": ci.iloc[:, 1].values,
     })
     return fc_df
+
+
+def fit_prophet_model(series, category):
+    """Fit Prophet with yearly + weekly seasonality; return 12-week forecast tail."""
+    prophet_df = pd.DataFrame({
+        "ds": series.index.to_timestamp(),
+        "y": series.values,
+    })
+    model = Prophet(yearly_seasonality=True, weekly_seasonality=True)
+    model.fit(prophet_df)
+    future = model.make_future_dataframe(periods=12, freq="W")
+    forecast = model.predict(future)
+    return forecast.tail(12).reset_index(drop=True)
