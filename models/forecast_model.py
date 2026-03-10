@@ -89,3 +89,36 @@ def fit_prophet_model(series, category):
     future = model.make_future_dataframe(periods=12, freq="W")
     forecast = model.predict(future)
     return forecast.tail(12).reset_index(drop=True)
+
+
+def plot_dual_forecast(category, history, sarima_fc, prophet_fc):
+    """Plot historical revenue alongside SARIMA and Prophet 12-week forecasts."""
+    fig, ax = plt.subplots(figsize=(12, 5))
+
+    # History
+    history_vals = history.values
+    history_idx = range(len(history_vals))
+    ax.plot(history_idx, history_vals, color="black", linewidth=1.5, label="History")
+
+    # SARIMA forecast
+    fc_start = len(history_vals)
+    fc_idx = range(fc_start, fc_start + len(sarima_fc))
+    ax.plot(fc_idx, sarima_fc["sarima_forecast"], color="blue", linewidth=1.5, label="SARIMA")
+    ax.fill_between(
+        fc_idx,
+        sarima_fc["lower_ci"],
+        sarima_fc["upper_ci"],
+        color="blue",
+        alpha=0.15,
+        label="SARIMA 95% CI",
+    )
+
+    # Prophet forecast
+    ax.plot(fc_idx, prophet_fc["yhat"].values, color="red", linestyle="--", linewidth=1.5, label="Prophet")
+
+    ax.set_title(f"Demand Forecast — Category {category}", fontsize=13)
+    ax.set_xlabel("Week")
+    ax.set_ylabel("Revenue (£)")
+    ax.legend()
+    plt.tight_layout()
+    plt.show()
