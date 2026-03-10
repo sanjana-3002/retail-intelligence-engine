@@ -139,3 +139,64 @@ def _build_feature_vectors(msg: dict, customer_stats: dict):
     ]])
 
     return churn_features, anomaly_features
+
+
+# ---------------------------------------------------------------------------
+# Inference
+# ---------------------------------------------------------------------------
+CHURN_FEATURE_NAMES = [
+    "recency", "frequency", "monetary", "velocity_decay_ratio",
+    "category_hhi", "spend_cv", "return_rate", "cancellation_rate",
+    "customer_tenure_days", "avg_items_per_order", "country_count",
+]
+
+
+def _run_inference(msg: dict, churn_features: np.ndarray, anomaly_features: np.ndarray) -> dict:
+    """Run all available models and return a flat results dict."""
+    results: dict = {}
+
+    # 1. Churn probability (XGBoost)
+    if "churn_xgb" in _MODELS:
+        prob = float(_MODELS["churn_xgb"].predict_proba(churn_features)[0, 1])
+        results["churn_probability"] = round(prob, 4)
+
+    # 2. Survival days (Cox PH)
+    if "cox_model" in _MODELS:
+        try:
+            cox_df = pd.DataFrame(churn_features, columns=CHURN_FEATURE_NAMES)
+            sf     = _MODELS["cox_model"].predict_survival_function(cox_df)
+            # median survival = first time survival drops below 0.5
+            below_half = sf[sf.columns[0]] < 0.5
+            median_days = float(below_half.idxmax()) if below_half.any() else 0.0
+        except Exception as exc:
+            logger.warning("cox inference failed: %s", exc)
+            median_days = 0.0
+        results["survival_days"] = round(median_days, 1)
+
+    # 3. CLV — BG/NBD + Gamma-Gamma
+    results["clv_90d"]  = 0.0
+    results["clv_365d"] = 0.0
+    if "bgf" in _MODELS and "ggf" in _MODELS:
+        try:
+            revenue = float(msg.get("revenue", 0.0))
+            clv_90  = float(_MODELS["ggf"].customer_lifetime_value(
+                _MODELS["bgf"], [1.0], [0.0], [1.0], [revenue],
+                time=3, discount_rate=0.01,
+            ).iloc[0])
+            clv_365 = float(_MODELS["ggf"].customer_lifetime_value(
+                _MODELS["bgf"], [1.0], [0.0], [1.0], [revenue],
+                time=12, discount_rate=0.01,
+            ).iloc[0])
+            results["clv_90d"]  = round(clv_90,  2)
+            results["clv_365d"] = round(clv_365, 2)
+        except Exception as exc:
+            logger.warning("CLV inference failed: %s", exc)
+
+    # 4. Anomaly detection (Isolation Forest)
+    if "isolation_forest" in _MODELS:
+        pred  = _MODELS["isolation_forest"].predict(anomaly_features)[0]
+        score = float(_MODELS["isolation_forest"].decision_function(anomaly_features)[0])
+        results["anomaly_flag"]  = 1 if pred == -1 else 0
+        results["anomaly_score"] = round(score, 4)
+
+    return results
