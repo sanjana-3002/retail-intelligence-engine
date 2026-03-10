@@ -44,3 +44,30 @@ MANIFEST_KEY = "models/latest_manifest.json"
 # Module-level model cache (persists across warm invocations)
 # ---------------------------------------------------------------------------
 _MODELS: dict = {}
+
+
+# ---------------------------------------------------------------------------
+# Cold-start model loading
+# ---------------------------------------------------------------------------
+def _load_models() -> None:
+    """Download and deserialise all models from GCS on cold start. No-op on warm start."""
+    global _MODELS
+    if _MODELS:
+        return
+
+    logger.info("cold start: loading models from GCS ...")
+    gcs    = storage.Client()
+    bucket = gcs.bucket(BUCKET_NAME)
+
+    manifest_blob = bucket.blob(MANIFEST_KEY)
+    manifest      = json.loads(manifest_blob.download_as_text())
+    logger.info("manifest keys: %s", list(manifest.keys()))
+
+    for model_name, gcs_uri in manifest.items():
+        gcs_path = gcs_uri.replace(f"gs://{BUCKET_NAME}/", "")
+        blob     = bucket.blob(gcs_path)
+        buf      = io.BytesIO(blob.download_as_bytes())
+        _MODELS[model_name] = joblib.load(buf)
+        logger.info("loaded: %s", model_name)
+
+    logger.info("all models ready: %s", list(_MODELS.keys()))
