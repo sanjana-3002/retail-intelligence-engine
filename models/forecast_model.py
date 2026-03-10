@@ -32,3 +32,16 @@ def build_weekly_revenue(df_all):
         .index.tolist()
     )
     return weekly_df, top5_categories
+
+
+def run_adf_test(series, category):
+    """Run Augmented Dickey-Fuller test and print result. Returns p-value."""
+    result = adfuller(series.dropna())
+    adf_stat = result[0]
+    p_value = result[1]
+    stationary = p_value <= 0.05
+    print(
+        f"[ADF] Category={category}  ADF stat={adf_stat:.4f}  "
+        f"p={p_value:.4f}  stationary={stationary}"
+    )
+    return p_value
