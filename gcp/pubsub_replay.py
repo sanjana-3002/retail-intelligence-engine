@@ -60,3 +60,23 @@ def build_message(row: dict) -> bytes:
         "category":     str(row.get("category", "")),
     }
     return json.dumps(payload).encode("utf-8")
+
+
+def publish_with_retry(
+    publisher: pubsub_v1.PublisherClient,
+    topic_path: str,
+    data: bytes,
+    max_retries: int = MAX_RETRIES,
+) -> bool:
+    """Publish a single message with up to max_retries attempts. Returns True on success."""
+    for attempt in range(1, max_retries + 1):
+        try:
+            future = publisher.publish(topic_path, data=data)
+            future.result(timeout=10)
+            return True
+        except Exception as exc:
+            if attempt == max_retries:
+                print(f"  skipped after {max_retries} attempts: {exc}")
+                return False
+            time.sleep(0.5 * attempt)
+    return False
