@@ -200,3 +200,58 @@ def _run_inference(msg: dict, churn_features: np.ndarray, anomaly_features: np.n
         results["anomaly_score"] = round(score, 4)
 
     return results
+
+
+# ---------------------------------------------------------------------------
+# BigQuery writes
+# ---------------------------------------------------------------------------
+def _write_event(bq: bigquery.Client, msg: dict, ts: datetime) -> None:
+    """Insert raw transaction event into the events table."""
+    row = {
+        "invoice_no":  msg.get("invoice_no"),
+        "customer_id": msg.get("customer_id"),
+        "timestamp":   ts.isoformat(),
+        "revenue":     msg.get("revenue"),
+        "quantity":    msg.get("quantity"),
+        "stock_code":  msg.get("stock_code"),
+        "country":     msg.get("country"),
+    }
+    errors = bq.insert_rows_json(f"{PROJECT_ID}.{DATASET_ID}.events", [row])
+    if errors:
+        logger.warning("events write errors: %s", errors)
+
+
+def _write_prediction(bq: bigquery.Client, msg: dict, results: dict, ts: datetime) -> None:
+    """Insert model scores into the predictions table."""
+    row = {
+        "customer_id":       msg.get("customer_id"),
+        "timestamp":         ts.isoformat(),
+        "churn_probability": results.get("churn_probability"),
+        "clv_90d":           results.get("clv_90d"),
+        "clv_365d":          results.get("clv_365d"),
+        "survival_days":     results.get("survival_days"),
+        "uplift_score":      None,
+        "customer_segment":  None,
+        "top_shap_driver_1": None,
+        "top_shap_driver_2": None,
+        "top_shap_driver_3": None,
+    }
+    errors = bq.insert_rows_json(f"{PROJECT_ID}.{DATASET_ID}.predictions", [row])
+    if errors:
+        logger.warning("predictions write errors: %s", errors)
+
+
+def _write_anomaly(bq: bigquery.Client, msg: dict, results: dict, ts: datetime) -> None:
+    """Insert flagged transaction into the anomalies table."""
+    row = {
+        "invoice_no":        msg.get("invoice_no"),
+        "timestamp":         ts.isoformat(),
+        "anomaly_score":     results.get("anomaly_score"),
+        "anomaly_flag":      results.get("anomaly_flag"),
+        "order_value":       msg.get("revenue"),
+        "order_value_zscore": None,
+        "customer_id":       msg.get("customer_id"),
+    }
+    errors = bq.insert_rows_json(f"{PROJECT_ID}.{DATASET_ID}.anomalies", [row])
+    if errors:
+        logger.warning("anomalies write errors: %s", errors)
