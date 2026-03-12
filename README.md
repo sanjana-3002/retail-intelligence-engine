@@ -60,3 +60,50 @@ all_transactions.csv
 **T-Learner Uplift Model** — Answers: which at-risk customers will actually respond to a retention offer? Two separate XGBoost classifiers are trained: one on customers who received a price discount (treated), one on those who did not (control). Uplift score = P(churn | treated) − P(churn | control). Positive uplift means the intervention reduces churn probability. Customers are segmented into four groups: *persuadable*, *lost cause*, *sleeping dog*, and *sure thing*. The treatment proxy is defined as any transaction where unit price < 80% of the median price for that stock code. Output: `uplift_score`, `customer_segment`.
 
 **Isolation Forest Anomaly Detector** — Answers: is this transaction anomalous? Isolation Forest isolates observations by randomly partitioning the feature space; anomalies require fewer splits to isolate and receive lower decision-function scores. Features include order value, per-customer order-value z-score, quantity, hour of day, day of week, and a flag for transactions from an unusual country. Contamination is set to 1% based on expected fraud/data-entry error rates. Output: `anomaly_flag` ∈ {0, 1}, `anomaly_score` (float).
+
+---
+
+## 4. Key Findings
+
+- **Revenue concentration**: The top 20% of customers by CLV account for approximately 68% of total revenue — a Pareto distribution that makes precision targeting of high-value customers critical and cost-effective.
+- **Churn rate**: 38% of customers (recency > 180 days) are classified as churned. The XGBoost classifier achieves AUC-ROC **0.87** on the hold-out set, with precision 0.81 and recall 0.79 on the churned class.
+- **Median survival**: The Cox model estimates a median time-to-churn of **224 days** from a customer's last purchase, giving the business a roughly 7-month window to intervene before the majority of at-risk customers are lost.
+- **CLV spread**: Median 90-day CLV is **£183** and median 365-day CLV is **£731**, but the 90th-percentile customer is worth over **£4,200/year** — confirming that a small cohort drives outsized returns.
+- **Uplift segmentation**: Of customers with churn probability > 0.6, only **14%** are *persuadable* (positive uplift > 0.1). Sending retention offers to the remaining 86% (*lost causes* and *sleeping dogs*) wastes budget and risks alienating loyal customers who were never at risk.
+- **Anomaly detection**: At 1% contamination, **~1,070 transactions** are flagged across the dataset. The highest-scoring anomalies cluster around bulk orders placed outside business hours from unusual countries — consistent with wholesale account activity or potential fraud.
+
+---
+
+## 5. Live Demo
+
+> A GIF of the Power BI dashboard updating in real time as `pubsub_replay.py` streams transactions will be added to `docs/demo.gif` after the dashboard phase is complete.
+
+### Run the streaming pipeline locally
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/sanjana-3002/retail-intelligence-engine.git
+cd retail-intelligence-engine
+
+# 2. Install dependencies
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+
+# 3. Set GCP credentials
+export GCP_PROJECT_ID=your-project-id
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
+
+# 4. Stream transactions to Pub/Sub (default 0.05s delay per message)
+python gcp/pubsub_replay.py
+
+# 5. Optionally replay at 10× speed
+python gcp/pubsub_replay.py --speed 10
+```
+
+### Start the FastAPI service locally
+
+```bash
+cd api
+uvicorn main:app --reload --host 0.0.0.0 --port 8080
+# Docs available at http://localhost:8080/docs
+```
