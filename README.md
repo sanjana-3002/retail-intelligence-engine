@@ -107,3 +107,38 @@ cd api
 uvicorn main:app --reload --host 0.0.0.0 --port 8080
 # Docs available at http://localhost:8080/docs
 ```
+
+---
+
+## 6. API Reference
+
+All endpoints are served by the FastAPI service deployed to Cloud Run. Full interactive docs are available at `/docs`.
+
+| Method | Path | Request body / params | Response |
+|--------|------|-----------------------|----------|
+| `POST` | `/predict/churn` | `{customer_id, recency, frequency, monetary, velocity_decay_ratio, category_hhi, spend_cv, return_rate, cancellation_rate, customer_tenure_days, avg_items_per_order, country_count}` | `{customer_id, churn_probability, survival_days, top_shap_drivers[3], recommended_action}` |
+| `POST` | `/predict/clv` | `{customer_id, frequency_repeat, recency_bgnbd, T_bgnbd, monetary}` | `{customer_id, clv_90d, clv_365d, prob_alive, expected_purchases_90d}` |
+| `GET` | `/customer/{customer_id}/profile` | path param: `customer_id` | Full customer intelligence row + last 10 anomaly events from BQ |
+| `GET` | `/anomalies/recent` | query: `limit=100`, `min_score=0.5` | `{anomalies: [...], count}` |
+| `GET` | `/forecast/{category}` | path param: `category` (2-char stock prefix) | `{category, forecast: [{forecast_date, sarima_forecast, prophet_forecast, lower_ci, upper_ci}×12]}` |
+| `GET` | `/health` | — | `{status, model_versions, last_prediction_timestamp}` |
+
+**Recommended action logic** (`/predict/churn`):
+
+| Condition | Action |
+|-----------|--------|
+| `churn_probability > 0.6` AND `uplift_score > 0.1` | `"Send retention offer"` |
+| `churn_probability > 0.6` AND `uplift_score ≤ 0.1` | `"Monitor only"` |
+| `churn_probability ≤ 0.6` | `"No action"` |
+
+---
+
+## 7. Scale Considerations
+
+| Bottleneck at 10× load | Why it breaks | Solution |
+|------------------------|---------------|----------|
+| **Cloud Function cold starts** | Each new instance downloads all model artefacts from GCS (~200 MB total), adding 8–15 s latency on the first invocation | Pin minimum instances (`--min-instances 2`) to keep warm replicas; alternatively convert models to ONNX to reduce artefact size |
+| **BigQuery streaming inserts** | `insert_rows_json` is billed per row and has a 10 MB/s per-table quota. At 10× load (~200 msg/s) inserts will queue and occasionally hit rate limits | Switch to BigQuery Storage Write API (batch-committed mode) or buffer messages in Pub/Sub and flush in micro-batches via a Dataflow job |
+| **Cox survival function query** | `predict_survival_function` iterates over a dense time grid for every request; at high concurrency this becomes CPU-bound inside the function instance | Pre-compute median survival days offline per customer segment and look up in a BQ table at inference time; reserve Cox for offline re-scoring |
+| **FastAPI single-worker memory** | Loading all models (~500 MB) per Cloud Run instance limits the number of concurrent workers on a 1 Gi container | Increase Cloud Run memory to 2 Gi and set `--concurrency 4`; consider separating churn and CLV into distinct microservices |
+| **GCS manifest cache miss** | If the manifest is updated mid-deployment, in-flight requests may load a mixture of old and new model versions | Use a versioned manifest key (e.g. `models/manifest_v3.json`) and update the env var atomically at deploy time rather than overwriting `latest_manifest.json` |
