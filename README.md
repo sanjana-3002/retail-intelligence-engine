@@ -142,3 +142,47 @@ All endpoints are served by the FastAPI service deployed to Cloud Run. Full inte
 | **Cox survival function query** | `predict_survival_function` iterates over a dense time grid for every request; at high concurrency this becomes CPU-bound inside the function instance | Pre-compute median survival days offline per customer segment and look up in a BQ table at inference time; reserve Cox for offline re-scoring |
 | **FastAPI single-worker memory** | Loading all models (~500 MB) per Cloud Run instance limits the number of concurrent workers on a 1 Gi container | Increase Cloud Run memory to 2 Gi and set `--concurrency 4`; consider separating churn and CLV into distinct microservices |
 | **GCS manifest cache miss** | If the manifest is updated mid-deployment, in-flight requests may load a mixture of old and new model versions | Use a versioned manifest key (e.g. `models/manifest_v3.json`) and update the env var atomically at deploy time rather than overwriting `latest_manifest.json` |
+
+---
+
+## 8. Tech Stack
+
+### Python Libraries
+
+| Library | Version | Purpose |
+|---------|---------|---------|
+| `pandas` | 2.2.3 | Data loading, feature engineering, master customer table |
+| `numpy` | 1.26.4 | Numerical operations and feature vector construction |
+| `scikit-learn` | 1.5.2 | Isolation Forest anomaly detection, train/test splits |
+| `xgboost` | 2.1.3 | Churn classifier (T-Learner treated/control models) |
+| `shap` | 0.45.1 | SHAP TreeExplainer for churn feature attribution |
+| `lifetimes` | 0.11.3 | BG/NBD and Gamma-Gamma CLV models |
+| `lifelines` | 0.29.0 | Cox Proportional Hazards survival model |
+| `statsmodels` | — | SARIMAX demand forecasting |
+| `prophet` | — | Prophet demand forecasting (category-level) |
+| `joblib` | 1.4.2 | Model serialisation / deserialisation |
+| `fastapi` | 0.115.0 | Inference REST API |
+| `uvicorn` | 0.30.6 | ASGI server for FastAPI |
+| `pydantic` | 2.8.0 | Request / response schema validation |
+
+### GCP Services
+
+| Service | Role |
+|---------|------|
+| **Cloud Pub/Sub** | Streaming ingest — `retail-transactions` topic receives one message per transaction |
+| **Cloud Functions** | Serverless inference — triggered by Pub/Sub, runs all 4 models per event |
+| **Cloud Storage** | Model artefact registry — stores `.pkl` files and `latest_manifest.json` |
+| **BigQuery** | Data warehouse — `events`, `predictions`, `anomalies`, `forecasts` tables |
+| **Cloud Run** | Hosts the FastAPI service with autoscaling and managed HTTPS |
+| **Container Registry** | Stores Docker images built by `gcloud builds submit` |
+
+### Infrastructure
+
+| Component | Detail |
+|-----------|--------|
+| Runtime | Python 3.11 |
+| Cloud Function memory | 512 MB / 60 s timeout |
+| Cloud Run memory | 1 Gi |
+| Region | `us-central1` |
+| BigQuery dataset | `retail_intelligence` |
+| Dataset | UCI Online Retail II — 1.07 M transactions, 5,878 customers, Dec 2009 – Dec 2011 |
