@@ -1,5 +1,8 @@
 data/raw/
 *.pkl
+data/processed/all_transactions.csv
+data/processed/anomaly_flags.csv
+tmp_plot.png
 .env
 credentials.json
 __pycache__/
