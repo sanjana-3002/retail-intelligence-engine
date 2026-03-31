@@ -1,6 +1,25 @@
 # Retail Intelligence Engine
 
-A real-time customer analytics platform built on Google Cloud Platform that streams retail transactions through a machine learning inference pipeline, persists predictions to BigQuery, and surfaces insights via a FastAPI service and Power BI dashboards.
+A real-time customer analytics platform built on Google Cloud Platform that streams retail transactions through a machine learning inference pipeline, persists predictions to BigQuery, and surfaces insights via a FastAPI service and interactive dashboard.
+
+---
+
+## Viewing the Dashboard
+
+1. Open a terminal and navigate to the project root:
+   ```bash
+   cd /path/to/retail-intelligence-engine
+   ```
+2. Start the local server:
+   ```bash
+   python3 -m http.server 8080
+   ```
+3. Open your browser and go to:
+   ```
+   http://localhost:8080/dashboard/retail_intelligence_dashboard.html
+   ```
+
+Press `Ctrl+C` in the terminal to stop the server when you're done.
 
 ---
 
