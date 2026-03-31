@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Retail Intelligence Engine</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0F1117; }
+    ::-webkit-scrollbar-thumb { background: #6C63FF; border-radius: 3px; }
+
+    body {
+      background: #0F1117;
+      color: #FFFFFF;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Loading Overlay ── */
+    #loading-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: #0F1117;
+      display: flex; align-items: center; justify-content: center; flex-direction: column;
+      transition: opacity 0.5s ease;
+    }
+    #loading-overlay p { color: #AAAACC; margin-top: 16px; font-size: 15px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 52px; height: 52px;
+      border: 4px solid #2A2A4A;
+      border-top-color: #6C63FF;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+
+    /* ── Navbar ── */
+    #navbar {
+      position: sticky; top: 0; z-index: 1000;
+      background: #0A0A14;
+      border-bottom: 1px solid #2A2A4A;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px;
+      height: 64px;
+    }
+    .nav-brand { display: flex; flex-direction: column; justify-content: center; }
+    .nav-title { font-size: 18px; font-weight: 700; color: #FFFFFF; line-height: 1.2; }
+    .nav-subtitle { font-size: 12px; color: #AAAACC; }
+    .nav-tabs { display: flex; gap: 4px; height: 100%; align-items: stretch; }
+    .nav-tab {
+      background: transparent; border: none; cursor: pointer;
+      color: #AAAACC; font-size: 14px; padding: 0 20px;
+      border-bottom: 2px solid transparent;
+      transition: color 0.2s, border-color 0.2s;
+      white-space: nowrap;
+      display: flex; align-items: center;
+    }
+    .nav-tab:hover { color: #FFFFFF; }
+    .nav-tab.active { color: #6C63FF; border-bottom-color: #6C63FF; }
+    .nav-live { display: flex; align-items: center; gap: 6px; }
+    @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(1.35); } }
+    .live-dot {
+      width: 8px; height: 8px; background: #2ECC71; border-radius: 50%;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    .live-text { color: #2ECC71; font-size: 13px; font-weight: 600; }
+
+    /* ── Page Container ── */
+    .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+    /* ── Page Visibility ── */
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* ── Section Titles ── */
+    .section-title {
+      font-size: 16px; font-weight: 700; color: #FFFFFF;
+      margin-bottom: 20px; padding-left: 12px;
+      border-left: 4px solid #6C63FF;
+    }
+    .section-title.teal-border   { border-left-color: #00B4D8; }
+    .section-title.orange-border { border-left-color: #F39C12; }
+
+    /* ── KPI Cards ── */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .kpi-card {
+      background: #1A1A2E;
+      border-radius: 12px;
+      padding: 20px 24px;
+      border-top: 3px solid #6C63FF;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      animation: fadeInUp 0.5s ease forwards;
+    }
+    .kpi-value {
+      font-size: 32px; font-weight: 700; color: #FFFFFF;
+      line-height: 1.1; margin-bottom: 6px;
+    }
+    .kpi-label { font-size: 13px; color: #AAAACC; }
+    .kpi-sub   { font-size: 11px; color: #AAAACC; margin-top: 4px; }
+
+    /* ── Chart Layout ── */
+    .chart-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .chart-card {
+      background: #1A1A2E;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .chart-card.full-width { margin-bottom: 24px; }
+    .plotly-chart { width: 100%; }
+
+    /* ── Forecast Controls ── */
+    .forecast-controls {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 12px;
+    }
+    .control-label { font-size: 13px; color: #FFFFFF; font-weight: 500; }
+    .dark-select {
+      background: #1A1A2E; color: #FFFFFF;
+      border: 1px solid #2A2A4A; border-radius: 6px;
+      padding: 6px 12px; font-size: 13px; cursor: pointer;
+      outline: none;
+    }
+    .dark-select:focus { border-color: #6C63FF; }
+
+    /* ── Tables ── */
+    .table-card {
+      background: #1A1A2E;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      margin-bottom: 24px;
+    }
+    .table-header-row {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 20px 20px 12px;
+    }
+    .table-title   { font-size: 15px; font-weight: 700; color: #FFFFFF; margin-bottom: 4px; }
+    .table-subtitle { font-size: 12px; color: #AAAACC; }
+    .table-count   { font-size: 12px; color: #AAAACC; white-space: nowrap; margin-top: 6px; }
+    .table-scroll  { overflow-x: auto; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .data-table thead tr { background: #12121F; }
+    .data-table thead th {
+      color: #6C63FF; font-weight: 600;
+      padding: 12px 16px; text-align: left;
+      border-bottom: 1px solid #2A2A4A;
+      white-space: nowrap;
+    }
+    .data-table tbody td {
+      padding: 10px 16px; color: #FFFFFF;
+      border-bottom: 1px solid #1E1E30;
+    }
+    .data-table tbody tr:hover td { background: #2A2A4A !important; }
+
+    /* ── Segment Badges ── */
+    .seg-badge {
+      display: inline-block;
+      border-radius: 20px; padding: 3px 10px;
+      font-size: 11px; font-weight: 600;
+      white-space: nowrap;
+    }
+    .seg-persuadable  { background: rgba(108,99,255,0.13); color:#6C63FF; border:1px solid #6C63FF; }
+    .seg-sure_thing   { background: rgba(46,204,113,0.13);  color:#2ECC71; border:1px solid #2ECC71; }
+    .seg-lost_cause   { background: rgba(231,76,60,0.13);   color:#E74C3C; border:1px solid #E74C3C; }
+    .seg-sleeping_dog { background: rgba(243,156,18,0.13);  color:#F39C12; border:1px solid #F39C12; }
+
+    /* ── Footer ── */
+    footer {
+      background: #0A0A14;
+      border-top: 1px solid #2A2A4A;
+      padding: 20px 24px;
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 13px; color: #AAAACC;
+    }
+
+    @media (max-width: 900px) {
+      .kpi-row    { grid-template-columns: 1fr 1fr; }
+      .chart-row  { grid-template-columns: 1fr; }
+      .nav-tabs .nav-tab { font-size: 12px; padding: 0 10px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ─── Loading Overlay ─── -->
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <p>Loading Retail Intelligence Data...</p>
+</div>
+
+<!-- ─── Navbar ─── -->
+<nav id="navbar">
+  <div class="nav-brand">
+    <div class="nav-title">📊 Retail Intelligence Engine</div>
+    <div class="nav-subtitle">Real-Time Customer Analytics Platform</div>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" data-tab="page1">👥 Customer Intelligence</button>
+    <button class="nav-tab" data-tab="page2">📈 Forecasting &amp; Anomalies</button>
+    <button class="nav-tab" data-tab="page3">🔄 Cohort &amp; Survival</button>
+  </div>
+  <div class="nav-live">
+    <span class="live-dot"></span>
+    <span class="live-text">Live</span>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- ═══════════════════════════════════════════════
+       PAGE 1 — Customer Intelligence
+  ═══════════════════════════════════════════════ -->
+  <div id="page1" class="page active">
+    <h2 class="section-title">Customer Intelligence Overview</h2>
+
+    <div class="kpi-row">
+      <div class="kpi-card" style="border-top-color:#6C63FF">
+        <div class="kpi-value" id="kpi-total-customers">—</div>
+        <div class="kpi-label">Total Customers</div>
+      </div>
+      <div class="kpi-card" style="border-top-color:#00B4D8">
+        <div class="kpi-value" id="kpi-avg-clv">—</div>
+        <div class="kpi-label">Avg CLV (365-day)</div>
+      </div>
+      <div class="kpi-card" style="border-top-color:#E74C3C">
+        <div class="kpi-value" id="kpi-high-risk">—</div>
+        <div class="kpi-label">High Risk Customers</div>
+        <div class="kpi-sub" id="kpi-high-risk-pct"></div>
+      </div>
+      <div class="kpi-card" style="border-top-color:#2ECC71">
+        <div class="kpi-value" id="kpi-avg-survival">—</div>
+        <div class="kpi-label">Avg Survival Days</div>
+      </div>
+    </div>
+
+    <div class="chart-row">
+      <div class="chart-card">
+        <div id="chart-rfm" class="plotly-chart" style="height:380px"></div>
+      </div>
+      <div class="chart-card">
+        <div id="chart-clv-dist" class="plotly-chart" style="height:380px"></div>
+      </div>
+    </div>
+
+    <div class="chart-row">
+      <div class="chart-card">
+        <div id="chart-churn-hist" class="plotly-chart" style="height:380px"></div>
+      </div>
+      <div class="chart-card">
+        <div id="chart-uplift-quad" class="plotly-chart" style="height:380px"></div>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-header-row">
+        <div>
+          <div class="table-title">⚠️ At-Risk High-Value Customers</div>
+          <div class="table-subtitle">CLV above 75th percentile &amp; churn probability &gt; 0.5</div>
+        </div>
+        <div class="table-count" id="at-risk-count"></div>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Customer ID</th><th>CLV (365d)</th><th>Churn Prob</th>
+              <th>Survival Days</th><th>Uplift Score</th><th>Segment</th><th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="at-risk-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- /page1 -->
+
+  <!-- ═══════════════════════════════════════════════
+       PAGE 2 — Forecasting & Anomalies
+  ═══════════════════════════════════════════════ -->
+  <div id="page2" class="page">
+    <h2 class="section-title teal-border">Demand Forecasting &amp; Anomaly Detection</h2>
+
+    <div class="kpi-row">
+      <div class="kpi-card" style="border-top-color:#F39C12">
+        <div class="kpi-value" id="kpi-anomaly-count">—</div>
+        <div class="kpi-label">Anomalies Detected (sample)</div>
+      </div>
+      <div class="kpi-card" style="border-top-color:#E74C3C">
+        <div class="kpi-value" id="kpi-anomaly-rate">—</div>
+        <div class="kpi-label">Anomaly Rate</div>
+      </div>
+      <div class="kpi-card" style="border-top-color:#00B4D8">
+        <div class="kpi-value" id="kpi-forecast-cats">—</div>
+        <div class="kpi-label">Categories Forecasted</div>
+      </div>
+      <div class="kpi-card" style="border-top-color:#6C63FF">
+        <div class="kpi-value">90 Days</div>
+        <div class="kpi-label">Forecast Horizon</div>
+      </div>
+    </div>
+
+    <div class="chart-card chart-full-width" style="margin-bottom:24px">
+      <div class="forecast-controls">
+        <label class="control-label" for="category-select">Select Category:</label>
+        <select id="category-select" class="dark-select"></select>
+      </div>
+      <div id="chart-forecast" class="plotly-chart" style="height:400px"></div>
+    </div>
+
+    <div class="chart-row">
+      <div class="chart-card">
+        <div id="chart-anomaly-hist" class="plotly-chart" style="height:380px"></div>
+      </div>
+      <div class="chart-card">
+        <div id="chart-country-rev" class="plotly-chart" style="height:380px"></div>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-header-row">
+        <div>
+          <div class="table-title">🚨 Flagged Anomalous Transactions</div>
+          <div class="table-subtitle">Top 20 most anomalous from 50K sample, sorted by anomaly score ascending</div>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Invoice No</th><th>Customer ID</th><th>Revenue</th>
+              <th>Qty</th><th>Country</th><th>Score</th><th>Risk Level</th>
+            </tr>
+          </thead>
+          <tbody id="anomaly-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- /page2 -->
+
+  <!-- ═══════════════════════════════════════════════
+       PAGE 3 — Cohort & Survival
+  ═══════════════════════════════════════════════ -->
+  <div id="page3" class="page">
+    <h2 class="section-title orange-border">Cohort Analysis &amp; Survival Modeling</h2>
+
+    <div class="kpi-row">
+      <div class="kpi-card" style="border-top-color:#6C63FF">
+        <div class="kpi-value" id="kpi-total-cohorts">—</div>
+        <div class="kpi-label">Total Cohorts Analyzed</div>
+      </div>
+      <div class="kpi-card" style="border-top-color:#00B4D8">
+        <div class="kpi-value" id="kpi-best-cohort">—</div>
+        <div class="kpi-label">Best Retention Cohort</div>
+      </div>
+      <div class="kpi-card" style="border-top-color:#2ECC71">
+        <div class="kpi-value" id="kpi-avg-m1">—</div>
+        <div class="kpi-label">Avg 1-Month Retention</div>
+      </div>
+      <div class="kpi-card" style="border-top-color:#F39C12">
+        <div class="kpi-value" id="kpi-avg-m3">—</div>
+        <div class="kpi-label">Avg 3-Month Retention</div>
+      </div>
+    </div>
+
+    <div class="chart-card" style="margin-bottom:24px">
+      <div id="chart-cohort" class="plotly-chart" style="height:520px"></div>
+    </div>
+
+    <div class="chart-row">
+      <div class="chart-card">
+        <div id="chart-survival" class="plotly-chart" style="height:400px"></div>
+      </div>
+      <div class="chart-card">
+        <div id="chart-segment-donut" class="plotly-chart" style="height:400px"></div>
+      </div>
+    </div>
+
+    <!-- Cox Table — static / hardcoded -->
+    <div class="table-card">
+      <div class="table-header-row">
+        <div>
+          <div class="table-title">📊 Cox Proportional Hazards — Feature Hazard Ratios</div>
+          <div class="table-subtitle">Hazard ratio &gt; 1 accelerates churn. Hazard ratio &lt; 1 is protective.</div>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr><th>Feature</th><th>Hazard Ratio</th><th>Interpretation</th><th>Significance</th></tr>
+          </thead>
+          <tbody>
+            <tr style="background:rgba(231,76,60,0.08)"><td>velocity_decay_ratio</td><td style="color:#E74C3C;font-weight:700">1.82</td><td>Decelerating customers churn 1.82× faster</td><td>⭐ High</td></tr>
+            <tr style="background:rgba(231,76,60,0.08)"><td>recency</td><td style="color:#E74C3C;font-weight:700">1.64</td><td>Each additional inactive day raises hazard 64%</td><td>⭐ High</td></tr>
+            <tr style="background:rgba(231,76,60,0.08)"><td>category_hhi</td><td style="color:#E74C3C;font-weight:700">1.41</td><td>Single-category buyers churn 41% faster</td><td>⭐ High</td></tr>
+            <tr style="background:rgba(231,76,60,0.08)"><td>spend_cv</td><td style="color:#E74C3C;font-weight:700">1.23</td><td>Erratic spenders churn 23% faster</td><td>🔸 Medium</td></tr>
+            <tr style="background:rgba(231,76,60,0.08)"><td>cancellation_rate</td><td style="color:#E74C3C;font-weight:700">1.18</td><td>High cancellers churn 18% faster</td><td>🔸 Medium</td></tr>
+            <tr style="background:rgba(46,204,113,0.08)"><td>return_rate</td><td style="color:#2ECC71;font-weight:700">0.71</td><td>High returners churn 29% slower (protective)</td><td>⭐ High</td></tr>
+            <tr style="background:rgba(46,204,113,0.08)"><td>avg_items_per_order</td><td style="color:#2ECC71;font-weight:700">0.88</td><td>Bulk buyers are slightly more loyal</td><td>🔸 Medium</td></tr>
+            <tr style="background:rgba(46,204,113,0.08)"><td>customer_tenure_days</td><td style="color:#2ECC71;font-weight:700">0.94</td><td>Longer tenure slightly protective</td><td>🔹 Low</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- /page3 -->
+
+</div><!-- /.container -->
+
+<footer>
+  <span>Built by Sanjana Waghray · MS Data Science, Illinois Institute of Technology</span>
+  <span>📊 Retail Intelligence Engine · 2025</span>
+</footer>
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════
+
+const SEGMENT_COLORS = {
+  persuadable:  '#6C63FF',
+  sure_thing:   '#2ECC71',
+  lost_cause:   '#E74C3C',
+  sleeping_dog: '#F39C12'
+};
+
+const BASE_LAYOUT = {
+  paper_bgcolor: '#1A1A2E',
+  plot_bgcolor:  '#1A1A2E',
+  font: { color: '#FFFFFF', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', size: 12 },
+  legend: { bgcolor: 'transparent', font: { color: '#FFFFFF', size: 11 } },
+  margin: { t: 50, b: 55, l: 70, r: 30 }
+};
+
+const PLOT_CFG = { responsive: true, displayModeBar: false };
+
+function layout(title, xTitle, yTitle, extra) {
+  return Object.assign({}, BASE_LAYOUT, {
+    title: { text: title, font: { size: 14, color: '#FFFFFF' }, x: 0.04 },
+    xaxis: Object.assign({ title: { text: xTitle }, gridcolor: '#2A2A4A', zerolinecolor: '#2A2A4A', color: '#AAAACC', linecolor: '#2A2A4A' }, (extra && extra.xaxis) || {}),
+    yaxis: Object.assign({ title: { text: yTitle }, gridcolor: '#2A2A4A', zerolinecolor: '#2A2A4A', color: '#AAAACC', linecolor: '#2A2A4A' }, (extra && extra.yaxis) || {}),
+    shapes:      (extra && extra.shapes)      || undefined,
+    annotations: (extra && extra.annotations) || undefined,
+    height:      (extra && extra.height)      || undefined,
+    margin:      (extra && extra.margin)      || BASE_LAYOUT.margin,
+    legend:      Object.assign({}, BASE_LAYOUT.legend, (extra && extra.legend) || {})
+  }, extra ? Object.fromEntries(Object.entries(extra).filter(([k]) => !['xaxis','yaxis','shapes','annotations','height','margin','legend'].includes(k))) : {});
+}
+
+// ═══════════════════════════════════════════════════════
+// GLOBAL STATE
+// ═══════════════════════════════════════════════════════
+
+const state = {
+  ci: [],
+  anomalies: [],
+  forecasts: [],
+  cohort: [],
+  atRisk: [],
+  anomalyTable: [],
+  kpis: {},
+  selectedCategory: null
+};
+
+// ═══════════════════════════════════════════════════════
+// SECTION 1: DATA LOADING
+// ═══════════════════════════════════════════════════════
+
+function loadCSV(url, opts) {
+  return new Promise(function(resolve, reject) {
+    Papa.parse(url, Object.assign({
+      download: true,
+      header: true,
+      skipEmptyLines: true,
+      complete: function(res) { resolve(res); },
+      error:    function(err) { reject(err);  }
+    }, opts || {}));
+  });
+}
+
+Promise.all([
+  loadCSV('../data/processed/full_customer_intelligence.csv'),
+  loadCSV('../data/processed/anomaly_flags.csv', { preview: 50000 }),
+  loadCSV('../data/processed/demand_forecasts.csv'),
+  loadCSV('../data/processed/cohort_retention.csv')
+]).then(function(results) {
+  state.ci        = results[0].data;
+  state.anomalies = results[1].data;
+  state.forecasts = results[2].data;
+  state.cohort    = results[3].data;
+  processData();
+  renderAll();
+  hideLoader();
+}).catch(function(err) {
+  console.error('Data load failed:', err);
+  document.getElementById('loading-overlay').innerHTML =
+    '<div style="color:#E74C3C;font-size:16px;text-align:center;padding:40px">' +
+    '⚠️ Failed to load data.<br><small style="color:#AAAACC">Ensure server is running: <code>python3 -m http.server 8080</code></small></div>';
+});
+
+// ═══════════════════════════════════════════════════════
+// SECTION 2: DATA PROCESSING
+// ═══════════════════════════════════════════════════════
+
+function parseSurvival(v) {
+  if (!v || v === '' || v === 'inf' || v === 'Inf' || v === 'Infinity') return Infinity;
+  var n = parseFloat(v);
+  return isNaN(n) ? Infinity : n;
+}
+
+function pct(arr, p) {
+  if (!arr.length) return 0;
+  var s = arr.slice().sort(function(a,b){ return a-b; });
+  var i = (p / 100) * (s.length - 1);
+  var lo = Math.floor(i), hi = Math.ceil(i);
+  return s[lo] + (s[hi] - s[lo]) * (i - lo);
+}
+
+function processData() {
+  // ── Parse full_customer_intelligence ──
+  state.ci = state.ci.map(function(r) {
+    return {
+      customer_id:             r.customer_id,
+      recency:                 parseFloat(r.recency)              || 0,
+      frequency:               parseFloat(r.frequency)            || 0,
+      monetary:                parseFloat(r.monetary)             || 0,
+      total_revenue:           parseFloat(r.total_revenue)        || 0,
+      clv_365d:                parseFloat(r.clv_365d)             || 0,
+      clv_90d:                 parseFloat(r.clv_90d)              || 0,
+      churn_probability:       parseFloat(r.churn_probability)    || 0,
+      predicted_survival_days: parseSurvival(r.predicted_survival_days),
+      uplift_score:            parseFloat(r.uplift_score)         || 0,
+      velocity_decay_ratio:    parseFloat(r.velocity_decay_ratio) || 0,
+      category_hhi:            parseFloat(r.category_hhi)        || 0,
+      spend_cv:                parseFloat(r.spend_cv)             || 0,
+      return_rate:             parseFloat(r.return_rate)          || 0,
+      cancellation_rate:       parseFloat(r.cancellation_rate)    || 0,
+      avg_items_per_order:     parseFloat(r.avg_items_per_order)  || 0,
+      primary_country:         r.primary_country                  || '',
+      customer_segment:        r.customer_segment                 || 'unknown'
+    };
+  });
+
+  // ── Parse anomalies ──
+  state.anomalies = state.anomalies.map(function(r) {
+    return {
+      invoice_no:    r.invoice_no,
+      customer_id:   r.customer_id,
+      stock_code:    r.stock_code,
+      country:       r.country || '',
+      revenue:       parseFloat(r.revenue)       || 0,
+      quantity:      parseInt(r.quantity)        || 0,
+      anomaly_flag:  parseInt(r.anomaly_flag)    || 0,
+      anomaly_score: parseFloat(r.anomaly_score) || 0
+    };
+  });
+
+  // ── Parse forecasts ──
+  state.forecasts = state.forecasts.map(function(r) {
+    return {
+      category:         String(r.category),
+      date:             r.date,
+      sarima_forecast:  parseFloat(r.sarima_forecast),
+      prophet_forecast: parseFloat(r.prophet_forecast),
+      lower_ci:         parseFloat(r.lower_ci),
+      upper_ci:         parseFloat(r.upper_ci)
+    };
+  });
+
+  // ── KPIs Page 1 ──
+  var ci = state.ci;
+  var total = ci.length;
+  var validCLV = ci.filter(function(r){ return r.clv_365d > 0 && isFinite(r.clv_365d); });
+  var avgCLV = validCLV.length
+    ? validCLV.reduce(function(s,r){ return s + r.clv_365d; }, 0) / validCLV.length
+    : 0;
+  var highRisk = ci.filter(function(r){ return r.churn_probability > 0.5; }).length;
+  var finiteSD = ci.filter(function(r){ return isFinite(r.predicted_survival_days) && r.predicted_survival_days > 0; });
+  var avgSurvival = finiteSD.length
+    ? finiteSD.reduce(function(s,r){ return s + r.predicted_survival_days; }, 0) / finiteSD.length
+    : 0;
+  state.kpis.p1 = { total: total, avgCLV: avgCLV, highRisk: highRisk, avgSurvival: avgSurvival };
+
+  // ── At-Risk High-Value table ──
+  var clvArr = validCLV.map(function(r){ return r.clv_365d; });
+  var clv75  = pct(clvArr, 75);
+  state.atRisk = ci
+    .filter(function(r){ return r.clv_365d > clv75 && r.churn_probability > 0.5; })
+    .sort(function(a,b){ return b.clv_365d - a.clv_365d; })
+    .slice(0, 20);
+
+  // ── KPIs Page 2 ──
+  var anom = state.anomalies;
+  var anomCount = anom.filter(function(r){ return r.anomaly_flag === 1; }).length;
+  var anomRate  = anom.length ? (anomCount / anom.length * 100).toFixed(1) : '0.0';
+  var cats = Array.from(new Set(state.forecasts.map(function(r){ return r.category; })));
+  state.kpis.p2 = { anomCount: anomCount, anomRate: anomRate, catCount: cats.length };
+  state.selectedCategory = cats[0] || null;
+
+  // ── Anomaly table (top 20 most anomalous) ──
+  state.anomalyTable = anom
+    .filter(function(r){ return r.anomaly_flag === 1; })
+    .sort(function(a,b){ return a.anomaly_score - b.anomaly_score; })
+    .slice(0, 20);
+
+  // ── KPIs Page 3 ──
+  var cohort = state.cohort;
+  var m1vals = cohort.map(function(r){ return parseFloat(r['1']); }).filter(function(v){ return !isNaN(v); });
+  var m3vals = cohort.map(function(r){ return parseFloat(r['3']); }).filter(function(v){ return !isNaN(v); });
+  var avgM1  = m1vals.length ? m1vals.reduce(function(s,v){ return s+v; },0) / m1vals.length * 100 : 0;
+  var avgM3  = m3vals.length ? m3vals.reduce(function(s,v){ return s+v; },0) / m3vals.length * 100 : 0;
+  var maxM1  = Math.max.apply(null, m1vals);
+  var bestCohortIdx = m1vals.indexOf(maxM1);
+  var bestCohort    = cohort[bestCohortIdx] ? cohort[bestCohortIdx].cohort_month : '—';
+  state.kpis.p3 = { totalCohorts: cohort.length, bestCohort: bestCohort, avgM1: avgM1, avgM3: avgM3 };
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 3: CHART RENDERING
+// ═══════════════════════════════════════════════════════
+
+function renderRFMScatter() {
+  var ci = state.ci;
+  var clvVals = ci.map(function(r){ return r.clv_365d || 0; });
+  var posClv  = clvVals.filter(function(v){ return v > 0; });
+  var minCLV  = posClv.length ? Math.min.apply(null, posClv) : 0;
+  var maxCLV  = posClv.length ? Math.max.apply(null, posClv) : 1;
+  var range   = maxCLV - minCLV || 1;
+
+  var segments = ['persuadable', 'sure_thing', 'lost_cause', 'sleeping_dog'];
+  var segLabels = { persuadable:'Persuadable', sure_thing:'Sure Thing', lost_cause:'Lost Cause', sleeping_dog:'Sleeping Dog' };
+  var traces = segments.map(function(seg) {
+    var rows = ci.filter(function(r){ return r.customer_segment === seg; });
+    return {
+      type: 'scatter', mode: 'markers',
+      name: segLabels[seg],
+      x: rows.map(function(r){ return r.recency; }),
+      y: rows.map(function(r){ return r.frequency; }),
+      marker: {
+        color: SEGMENT_COLORS[seg], opacity: 0.75, line: { width: 0 },
+        size: rows.map(function(r){
+          var clv = r.clv_365d || 0;
+          return 6 + Math.max(0, clv - minCLV) / range * 18;
+        })
+      },
+      customdata: rows.map(function(r){ return [r.customer_id, r.clv_365d, r.churn_probability, segLabels[seg]]; }),
+      hovertemplate: 'Customer: %{customdata[0]}<br>CLV: £%{customdata[1]:.0f}<br>Churn: %{customdata[2]:.4f}<br>Segment: %{customdata[3]}<extra></extra>'
+    };
+  });
+
+  Plotly.newPlot('chart-rfm', traces, layout('Customer RFM Intelligence', 'Recency (days)', 'Purchase Frequency', {
+    legend: { orientation: 'h', y: -0.18, bgcolor: 'transparent', font: { color: '#FFFFFF', size: 11 } }
+  }), PLOT_CFG);
+}
+
+function renderCLVDist() {
+  var ci = state.ci;
+  var bins   = ['£0–100', '£100–500', '£500–1K', '£1K–2K', '£2K+'];
+  var colors = ['#6C63FF', '#7B74FF', '#00B4D8', '#00C8EC', '#2ECC71'];
+  var counts = [
+    ci.filter(function(r){ return r.clv_365d > 0  && r.clv_365d < 100;  }).length,
+    ci.filter(function(r){ return r.clv_365d >= 100 && r.clv_365d < 500;  }).length,
+    ci.filter(function(r){ return r.clv_365d >= 500 && r.clv_365d < 1000; }).length,
+    ci.filter(function(r){ return r.clv_365d >= 1000 && r.clv_365d < 2000; }).length,
+    ci.filter(function(r){ return r.clv_365d >= 2000; }).length
+  ];
+  var trace = {
+    type: 'bar', x: bins, y: counts,
+    marker: { color: colors },
+    hovertemplate: '%{x}: %{y} customers<extra></extra>'
+  };
+  Plotly.newPlot('chart-clv-dist', [trace],
+    layout('CLV Distribution (365-day)', 'CLV Range', 'Number of Customers'),
+    PLOT_CFG);
+}
+
+function renderChurnHist() {
+  var ci = state.ci;
+  var trace = {
+    type: 'histogram',
+    x: ci.map(function(r){ return r.churn_probability; }),
+    nbinsx: 30,
+    marker: { color: '#E74C3C', opacity: 0.85 },
+    name: 'Customers'
+  };
+  Plotly.newPlot('chart-churn-hist', [trace], layout('Churn Risk Distribution', 'Churn Probability', 'Number of Customers', {
+    shapes: [{ type:'line', x0:0.5, x1:0.5, y0:0, y1:1, yref:'paper', line:{ color:'#F39C12', width:2, dash:'dash' } }],
+    annotations: [{ x:0.5, y:0.98, yref:'paper', text:'High Risk →', showarrow:false, font:{ color:'#F39C12', size:11 }, xanchor:'left', xshift:4 }]
+  }), PLOT_CFG);
+}
+
+function renderUpliftQuad() {
+  var ci = state.ci;
+  var upliftVals = ci.map(function(r){ return r.uplift_score; });
+  var maxU = Math.max.apply(null, upliftVals);
+  var minU = Math.min.apply(null, upliftVals);
+  var segments = ['persuadable', 'sure_thing', 'lost_cause', 'sleeping_dog'];
+  var segLabels = { persuadable:'Persuadable', sure_thing:'Sure Thing', lost_cause:'Lost Cause', sleeping_dog:'Sleeping Dog' };
+  var traces = segments.map(function(seg) {
+    var rows = ci.filter(function(r){ return r.customer_segment === seg; });
+    return {
+      type: 'scatter', mode: 'markers',
+      name: segLabels[seg],
+      x: rows.map(function(r){ return r.churn_probability; }),
+      y: rows.map(function(r){ return r.uplift_score; }),
+      marker: { color: SEGMENT_COLORS[seg], size: 6, opacity: 0.7 }
+    };
+  });
+  Plotly.newPlot('chart-uplift-quad', traces, layout('Uplift Quadrant Analysis', 'Churn Probability', 'Uplift Score', {
+    shapes: [
+      { type:'line', x0:0.5, x1:0.5, y0:0, y1:1, yref:'paper', line:{ color:'#AAAACC', width:1, dash:'dot' } },
+      { type:'line', x0:0, x1:1, xref:'paper', y0:0.1, y1:0.1, line:{ color:'#AAAACC', width:1, dash:'dot' } }
+    ],
+    annotations: [
+      { x:0.75, y:maxU*0.8, text:'PERSUADABLES',  showarrow:false, font:{ color:'#AAAACC', size:10 } },
+      { x:0.25, y:minU*0.8, text:'SURE THINGS',   showarrow:false, font:{ color:'#AAAACC', size:10 } },
+      { x:0.75, y:minU*0.8, text:'LOST CAUSES',   showarrow:false, font:{ color:'#AAAACC', size:10 } },
+      { x:0.25, y:maxU*0.8, text:'SLEEPING DOGS', showarrow:false, font:{ color:'#AAAACC', size:10 } }
+    ],
+    legend: { orientation:'h', y:-0.18, bgcolor:'transparent', font:{ color:'#FFFFFF', size:11 } }
+  }), PLOT_CFG);
+}
+
+function renderForecastChart(category) {
+  var filtered = state.forecasts.filter(function(r){ return r.category === String(category); });
+  if (!filtered.length) return;
+  var dates = filtered.map(function(r){ return r.date; });
+  var traces = [
+    {
+      type:'scatter', mode:'lines', name:'SARIMA Forecast',
+      x: dates, y: filtered.map(function(r){ return r.sarima_forecast; }),
+      line: { color:'#6C63FF', width:2 }
+    },
+    {
+      type:'scatter', mode:'lines', name:'Prophet Forecast',
+      x: dates, y: filtered.map(function(r){ return r.prophet_forecast; }),
+      line: { color:'#00B4D8', width:2, dash:'dash' }
+    },
+    {
+      type:'scatter', mode:'lines', name:'Upper CI',
+      x: dates, y: filtered.map(function(r){ return r.upper_ci; }),
+      line: { color:'transparent' }, showlegend: false, hoverinfo:'skip'
+    },
+    {
+      type:'scatter', mode:'lines', name:'Confidence Interval',
+      x: dates, y: filtered.map(function(r){ return r.lower_ci; }),
+      line: { color:'transparent' }, fill:'tonexty', fillcolor:'rgba(108,99,255,0.15)'
+    }
+  ];
+  Plotly.newPlot('chart-forecast', traces,
+    layout('Demand Forecast — SARIMA vs Prophet (Category ' + category + ')', 'Date', 'Revenue (£)', {
+      xaxis: { type:'date', gridcolor:'#2A2A4A', color:'#AAAACC', linecolor:'#2A2A4A' }
+    }),
+    PLOT_CFG);
+}
+
+function renderAnomalyHist() {
+  var anom = state.anomalies;
+  var scores = anom.map(function(r){ return r.anomaly_score; }).filter(function(v){ return isFinite(v); });
+  var anomScores = anom.filter(function(r){ return r.anomaly_flag===1; }).map(function(r){ return r.anomaly_score; });
+  var threshold  = anomScores.length ? Math.max.apply(null, anomScores) : 0;
+  var trace = {
+    type:'histogram', x:scores, nbinsx:40,
+    marker:{ color:'#F39C12', opacity:0.85 }, name:'Anomaly Score'
+  };
+  Plotly.newPlot('chart-anomaly-hist', [trace],
+    layout('Anomaly Score Distribution', 'Anomaly Score (lower = more anomalous)', 'Count', {
+      shapes: [{ type:'line', x0:threshold, x1:threshold, y0:0, y1:1, yref:'paper', line:{ color:'#E74C3C', width:2, dash:'dash' } }],
+      annotations: [{ x:threshold, y:0.85, yref:'paper', text:'Anomaly Threshold', showarrow:true, arrowcolor:'#E74C3C', font:{ color:'#E74C3C', size:11 }, xanchor:'right' }]
+    }),
+    PLOT_CFG);
+}
+
+function renderCountryRevenue() {
+  // Pre-computed from all_transactions.csv (100MB file — loaded once server-side)
+  var data = [
+    { c:'Denmark',        r: 68560.19  },
+    { c:'Sweden',         r: 86353.04  },
+    { c:'Switzerland',    r: 94270.29  },
+    { c:'Spain',          r: 98612.79  },
+    { c:'Australia',      r: 168484.66 },
+    { c:'France',         r: 316948.80 },
+    { c:'Germany',        r: 388829.75 },
+    { c:'Netherlands',    r: 549952.66 },
+    { c:'EIRE',           r: 628928.63 },
+    { c:'United Kingdom', r: 17246945.52 }
+  ];
+  var barColors = ['#005F73','#0A7080','#0E8490','#1298A0','#16ADB0','#1AC2C0','#1ED4CC','#2EE0D8','#3EEAE0','#00B4D8'];
+  var trace = {
+    type:'bar', orientation:'h',
+    x: data.map(function(d){ return d.r; }),
+    y: data.map(function(d){ return d.c; }),
+    marker:{ color: barColors },
+    hovertemplate: '%{y}: £%{x:,.0f}<extra></extra>'
+  };
+  Plotly.newPlot('chart-country-rev', [trace],
+    layout('Revenue by Country (Top 10)', 'Total Revenue (£)', '', {
+      margin: { t:50, b:55, l:115, r:30 }
+    }),
+    PLOT_CFG);
+}
+
+function renderCohortHeatmap() {
+  var cohort = state.cohort;
+  if (!cohort.length) return;
+  var monthCols = Object.keys(cohort[0]).filter(function(k){ return k !== 'cohort_month'; });
+  var yLabels   = cohort.map(function(r){ return r.cohort_month; });
+  var zData     = cohort.map(function(row) {
+    return monthCols.map(function(m) {
+      var v = parseFloat(row[m]);
+      return isNaN(v) ? null : v * 100;
+    });
+  });
+  var textData = zData.map(function(row) {
+    return row.map(function(v){ return v !== null ? v.toFixed(1) + '%' : ''; });
+  });
+  var trace = {
+    type:'heatmap',
+    z: zData,
+    x: monthCols.map(function(m){ return 'M' + m; }),
+    y: yLabels,
+    colorscale: [[0,'#E74C3C'],[0.3,'#F39C12'],[0.6,'#F1C40F'],[1,'#2ECC71']],
+    text: textData,
+    texttemplate: '%{text}',
+    textfont: { size: 8, color: '#FFFFFF' },
+    hovertemplate: 'Cohort: %{y}<br>Month %{x}<br>Retention: %{z:.1f}%<extra></extra>',
+    colorbar: { tickfont:{ color:'#FFFFFF', size:10 }, title:{ text:'%', font:{ color:'#FFFFFF' } } }
+  };
+  Plotly.newPlot('chart-cohort', [trace],
+    layout('Cohort Retention Heatmap', 'Months Since Acquisition', 'Acquisition Cohort', {
+      height: 520,
+      margin: { t:50, b:60, l:100, r:80 }
+    }),
+    PLOT_CFG);
+}
+
+function renderSurvivalCurves() {
+  var ci = state.ci;
+  var MAX_DAY = 550, STEP = 10;
+  var dayPts = [];
+  for (var d = 0; d <= MAX_DAY; d += STEP) dayPts.push(d);
+
+  var segments = ['persuadable', 'sure_thing', 'lost_cause', 'sleeping_dog'];
+  var segLabels = { persuadable:'Persuadable', sure_thing:'Sure Thing', lost_cause:'Lost Cause', sleeping_dog:'Sleeping Dog' };
+  var traces = [];
+  segments.forEach(function(seg) {
+    var rows = ci.filter(function(r){ return r.customer_segment === seg; });
+    if (!rows.length) return;
+    var survDays = rows.map(function(r){ return r.predicted_survival_days; }); // includes Infinity
+    var total    = survDays.length;
+    var survProbs = dayPts.map(function(t) {
+      return survDays.filter(function(d){ return d > t; }).length / total;
+    });
+    traces.push({
+      type:'scatter', mode:'lines', name: segLabels[seg],
+      x: dayPts, y: survProbs,
+      line: { color: SEGMENT_COLORS[seg], width: 2 }
+    });
+  });
+
+  Plotly.newPlot('chart-survival', traces,
+    layout('Survival Curves by Customer Segment', 'Days Since Acquisition', 'Survival Probability', {
+      yaxis: { range:[0,1], tickformat:'.0%', gridcolor:'#2A2A4A', color:'#AAAACC', linecolor:'#2A2A4A' },
+      legend: { x:0.72, y:0.98, bgcolor:'rgba(26,26,46,0.8)', font:{ color:'#FFFFFF', size:11 } }
+    }),
+    PLOT_CFG);
+}
+
+function renderSegmentDonut() {
+  var ci = state.ci;
+  var segments  = ['persuadable','sure_thing','lost_cause','sleeping_dog'];
+  var segLabels = ['Persuadable','Sure Thing','Lost Cause','Sleeping Dog'];
+  var counts = segments.map(function(seg){
+    return ci.filter(function(r){ return r.customer_segment === seg; }).length;
+  });
+  var trace = {
+    type:'pie',
+    values: counts, labels: segLabels,
+    marker: { colors: segments.map(function(s){ return SEGMENT_COLORS[s]; }) },
+    hole: 0.5, textinfo:'percent+label',
+    textfont: { color:'#FFFFFF', size:11 },
+    hovertemplate: '%{label}<br>Count: %{value}<br>Share: %{percent}<extra></extra>'
+  };
+  Plotly.newPlot('chart-segment-donut', [trace], Object.assign({}, BASE_LAYOUT, {
+    title: { text:'Customer Segment Distribution', font:{ size:14, color:'#FFFFFF' }, x:0.04 },
+    margin: { t:50, b:30, l:30, r:30 },
+    showlegend: true
+  }), PLOT_CFG);
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 4: TABLE RENDERING
+// ═══════════════════════════════════════════════════════
+
+function fmt(n, prefix, decimals) {
+  if (!isFinite(n)) return '∞';
+  var s = Math.round(n);
+  return (prefix||'') + s.toLocaleString('en-GB');
+}
+
+function renderAtRiskTable() {
+  var data = state.atRisk;
+  document.getElementById('at-risk-count').textContent =
+    'Showing ' + data.length + ' at-risk high-value customers';
+
+  var rows = data.map(function(r, i) {
+    var bg = i % 2 === 0 ? '#1A1A2E' : '#12121F';
+    var churnBg = r.churn_probability > 0.8 ? 'rgba(231,76,60,0.22)' :
+                  r.churn_probability > 0.5 ? 'rgba(243,156,18,0.18)' : '';
+    var upliftStr = (r.uplift_score >= 0 ? '+' : '') + r.uplift_score.toFixed(4);
+    var upliftColor = r.uplift_score >= 0 ? '#2ECC71' : '#E74C3C';
+    var survStr = isFinite(r.predicted_survival_days)
+      ? Math.round(r.predicted_survival_days) + ' days' : '∞';
+    var seg = r.customer_segment;
+    var segBadge = '<span class="seg-badge seg-' + seg + '">' + seg.replace('_',' ') + '</span>';
+    var action, actionColor;
+    if (r.churn_probability > 0.5 && r.uplift_score > 0.1) {
+      action = '🎯 Send Retention Offer'; actionColor = '#2ECC71';
+    } else if (r.churn_probability > 0.5) {
+      action = '👀 Monitor Only'; actionColor = '#F39C12';
+    } else {
+      action = '✅ No Action'; actionColor = '#AAAACC';
+    }
+    var clvFmt = '£' + Math.round(r.clv_365d).toLocaleString('en-GB');
+    return '<tr style="background:' + bg + '">' +
+      '<td>' + r.customer_id + '</td>' +
+      '<td>' + clvFmt + '</td>' +
+      '<td style="background:' + churnBg + '">' + r.churn_probability.toFixed(4) + '</td>' +
+      '<td>' + survStr + '</td>' +
+      '<td style="color:' + upliftColor + '">' + upliftStr + '</td>' +
+      '<td>' + segBadge + '</td>' +
+      '<td style="color:' + actionColor + ';font-size:12px">' + action + '</td>' +
+      '</tr>';
+  });
+  document.getElementById('at-risk-table-body').innerHTML = rows.join('');
+}
+
+function renderAnomalyTable() {
+  var data = state.anomalyTable;
+  var rows = data.map(function(r, i) {
+    var bg = i % 2 === 0 ? '#1A1A2E' : '#12121F';
+    var custId = (r.customer_id && r.customer_id.trim()) ? r.customer_id : 'Anonymous';
+    var score = r.anomaly_score;
+    var riskLabel, riskStyle;
+    if (score < -0.2) {
+      riskLabel = '🔴 High Risk';   riskStyle = 'color:#E74C3C';
+    } else if (score < -0.1) {
+      riskLabel = '🟡 Medium Risk'; riskStyle = 'color:#F39C12';
+    } else {
+      riskLabel = '🟢 Low Risk';    riskStyle = 'color:#2ECC71';
+    }
+    var rev = r.revenue.toLocaleString('en-GB', { minimumFractionDigits:2, maximumFractionDigits:2 });
+    return '<tr style="background:' + bg + '">' +
+      '<td>' + r.invoice_no + '</td>' +
+      '<td>' + custId + '</td>' +
+      '<td>£' + rev + '</td>' +
+      '<td>' + r.quantity + '</td>' +
+      '<td>' + r.country + '</td>' +
+      '<td>' + score.toFixed(4) + '</td>' +
+      '<td style="' + riskStyle + '">' + riskLabel + '</td>' +
+      '</tr>';
+  });
+  document.getElementById('anomaly-table-body').innerHTML = rows.join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER ALL
+// ═══════════════════════════════════════════════════════
+
+function renderKPIs() {
+  var p1 = state.kpis.p1, p2 = state.kpis.p2, p3 = state.kpis.p3;
+  // Page 1
+  document.getElementById('kpi-total-customers').textContent = p1.total.toLocaleString();
+  document.getElementById('kpi-avg-clv').textContent = '£' + Math.round(p1.avgCLV).toLocaleString('en-GB');
+  document.getElementById('kpi-high-risk').textContent = p1.highRisk.toLocaleString();
+  document.getElementById('kpi-high-risk-pct').textContent = (p1.highRisk / p1.total * 100).toFixed(1) + '% of total';
+  document.getElementById('kpi-avg-survival').textContent = Math.round(p1.avgSurvival) + ' days';
+  // Page 2
+  document.getElementById('kpi-anomaly-count').textContent = p2.anomCount.toLocaleString();
+  document.getElementById('kpi-anomaly-rate').textContent  = p2.anomRate + '%';
+  document.getElementById('kpi-forecast-cats').textContent = p2.catCount;
+  // Page 3
+  document.getElementById('kpi-total-cohorts').textContent = p3.totalCohorts;
+  document.getElementById('kpi-best-cohort').textContent   = p3.bestCohort;
+  document.getElementById('kpi-avg-m1').textContent        = p3.avgM1.toFixed(1) + '%';
+  document.getElementById('kpi-avg-m3').textContent        = p3.avgM3.toFixed(1) + '%';
+}
+
+function populateCategoryDropdown() {
+  var cats = Array.from(new Set(state.forecasts.map(function(r){ return r.category; }))).sort();
+  var sel  = document.getElementById('category-select');
+  sel.innerHTML = cats.map(function(c){
+    return '<option value="' + c + '">Category ' + c + '</option>';
+  }).join('');
+  if (cats.length) {
+    state.selectedCategory = cats[0];
+    sel.addEventListener('change', function(e) {
+      state.selectedCategory = e.target.value;
+      renderForecastChart(e.target.value);
+    });
+  }
+}
+
+function renderAll() {
+  renderKPIs();
+  // Page 1
+  renderRFMScatter();
+  renderCLVDist();
+  renderChurnHist();
+  renderUpliftQuad();
+  renderAtRiskTable();
+  // Page 2
+  populateCategoryDropdown();
+  renderForecastChart(state.selectedCategory);
+  renderAnomalyHist();
+  renderCountryRevenue();
+  renderAnomalyTable();
+  // Page 3
+  renderCohortHeatmap();
+  renderSurvivalCurves();
+  renderSegmentDonut();
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 5: NAVIGATION
+// ═══════════════════════════════════════════════════════
+
+document.querySelectorAll('.nav-tab').forEach(function(tab) {
+  tab.addEventListener('click', function() {
+    var target = tab.dataset.tab;
+    document.querySelectorAll('.nav-tab').forEach(function(t){ t.classList.remove('active'); });
+    document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+    tab.classList.add('active');
+    document.getElementById(target).classList.add('active');
+    // Resize all Plotly charts in the newly visible page after layout settles
+    setTimeout(function() {
+      document.getElementById(target).querySelectorAll('.plotly-chart').forEach(function(el) {
+        if (el.layout) Plotly.Plots.resize(el);
+      });
+    }, 80);
+  });
+});
+
+var _resizeTimer;
+window.addEventListener('resize', function() {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(function() {
+    document.querySelectorAll('.plotly-chart').forEach(function(el) {
+      if (el.layout) Plotly.Plots.resize(el);
+    });
+  }, 200);
+});
+
+function hideLoader() {
+  var ov = document.getElementById('loading-overlay');
+  ov.style.opacity = '0';
+  setTimeout(function(){ ov.style.display = 'none'; }, 500);
+}
+</script>
+</body>
+</html>
